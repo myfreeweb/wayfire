@@ -97,7 +97,6 @@ class wayfire_core
             wayfire_shell *wf_shell;
         } protocols;
 
-
         std::string wayland_display, xwayland_display;
 
         input_manager *input;
@@ -112,6 +111,9 @@ class wayfire_core
         uint32_t get_keyboard_modifiers();
 
         void set_cursor(std::string name);
+
+        /* no such coordinate will ever realistically be used for input */
+        static const int invalid_coordinate = -123456789;
 
         /* in output-layout-local coordinates */
         std::tuple<int, int> get_cursor_position();

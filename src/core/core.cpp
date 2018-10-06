@@ -219,24 +219,25 @@ void wayfire_core::set_cursor(std::string name)
         wlr_xcursor_manager_set_cursor_image(input->xcursor, name.c_str(), input->cursor);
 }
 
+const int wayfire_core::invalid_coordinate;
 std::tuple<int, int> wayfire_core::get_cursor_position()
 {
     if (input->cursor)
         return std::tuple<int, int> (input->cursor->x, input->cursor->y);
     else
-        return std::tuple<int, int> (0, 0);
+        return std::tuple<int, int> (invalid_coordinate, invalid_coordinate);
 }
 
 std::tuple<int, int> wayfire_core::get_touch_position(int id)
 {
     if (!input->our_touch)
-        return std::make_tuple(0, 0);
+        return std::make_tuple(invalid_coordinate, invalid_coordinate);
 
     auto it = input->our_touch->gesture_recognizer.current.find(id);
     if (it != input->our_touch->gesture_recognizer.current.end())
         return std::make_tuple(it->second.sx, it->second.sy);
 
-    return std::make_tuple(0, 0);
+    return std::make_tuple(invalid_coordinate, invalid_coordinate);
 }
 
 wayfire_surface_t *wayfire_core::get_cursor_focus()

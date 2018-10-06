@@ -1,5 +1,4 @@
 #include <output.hpp>
-#include <debug.hpp>
 #include <core.hpp>
 #include <view.hpp>
 #include <workspace-manager.hpp>
@@ -118,15 +117,29 @@ class wayfire_move : public wayfire_plugin_t
 
         void move_requested(signal_data *data)
         {
-            // TODO: Implement touch movement
             auto view = get_signaled_view(data);
-            if (view)
+            if (!view)
+                return;
+
+            int sx, sy;
+
+            GetTuple(tx, ty, core->get_touch_position(0));
+            if (tx != wayfire_core::invalid_coordinate &&
+                ty != wayfire_core::invalid_coordinate)
             {
+                sx = tx;
+                sy = ty;
+                is_using_touch = true;
+            } else
+            {
+                GetTuple(px, py, core->get_cursor_position());
+                sx = px;
+                sy = py;
                 is_using_touch = false;
-                was_client_request = true;
-                GetTuple(x, y, output->get_cursor_position());
-                initiate(view, x, y);
             }
+
+            was_client_request = true;
+            initiate(view, sx, sy);
         }
 
         void initiate(wayfire_view view, int sx, int sy)
@@ -195,9 +208,8 @@ class wayfire_move : public wayfire_plugin_t
             }
         }
 
-        int calc_slot()
+        int calc_slot(int x, int y)
         {
-            GetTuple(x, y, output->get_cursor_position());
             auto g = output->workspace->get_workarea();
 
             if (!point_inside({x, y}, output->get_relative_geometry()))
@@ -251,13 +263,19 @@ class wayfire_move : public wayfire_plugin_t
                 view->set_moving(true);
             }
 
-            log_info("got here, unsnapped is %d", unsnapped);
             if (!unsnapped)
                 return;
 
             view->move(initial_geometry.x + dx, initial_geometry.y + dy);
 
-            GetTuple(global_x, global_y, core->get_cursor_position());
+            std::tuple<int, int> global_input;
+            if (is_using_touch) {
+                global_input = core->get_touch_position(0);
+            } else {
+                global_input = core->get_cursor_position();
+            }
+
+            GetTuple(global_x, global_y, global_input);
             auto target_output = core->get_output_at(global_x, global_y);
 
             if (target_output != output)
@@ -282,7 +300,7 @@ class wayfire_move : public wayfire_plugin_t
 
             /* TODO: possibly show some visual indication */
             if (enable_snap)
-                slot = calc_slot();
+                slot = calc_slot(x, y);
         }
 
         void fini()

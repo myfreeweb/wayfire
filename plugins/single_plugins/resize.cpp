@@ -108,12 +108,27 @@ class wayfire_resize : public wayfire_plugin_t {
     {
         auto request = static_cast<resize_request_signal*> (data);
         auto view = get_signaled_view(data);
-        was_client_request = true;
-        if (view)
+
+        if (!view)
+            return;
+
+        int sx, sy;
+
+        GetTuple(tx, ty, core->get_touch_position(0));
+        if (tx != wayfire_core::invalid_coordinate &&
+            ty != wayfire_core::invalid_coordinate)
         {
-            GetTuple(x, y, output->get_cursor_position());
-            initiate(view, x, y, request->edges);
+            sx = tx;
+            sy = ty;
+        } else
+        {
+            GetTuple(px, py, core->get_cursor_position());
+            sx = px;
+            sy = py;
         }
+
+        was_client_request = true;
+        initiate(view, sx, sy, request->edges);
     }
 
     void initiate(wayfire_view view, int sx, int sy, uint32_t forced_edges = 0)
