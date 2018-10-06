@@ -505,6 +505,8 @@ void wayfire_view_t::take_snapshot()
     {
         surface->render_pixman(fb, x - buffer_geometry.x, y - buffer_geometry.y, NULL);
     }, true);
+
+    GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 }
 
 void wayfire_view_t::render_fb(pixman_region32_t* damage, wf_framebuffer fb)
