@@ -107,9 +107,7 @@ void input_manager::update_cursor_focus(wayfire_surface_t *focus, int x, int y)
 
 void input_manager::update_cursor_position(uint32_t time_msec, bool real_update)
 {
-    auto output = core->get_output_at(cursor->x, cursor->y);
-    assert(output);
-
+    GetTuple(x, y, core->get_cursor_position());
     if (input_grabbed() && real_update)
     {
         GetTuple(sx, sy, core->get_active_output()->get_cursor_position());
@@ -118,35 +116,21 @@ void input_manager::update_cursor_position(uint32_t time_msec, bool real_update)
         return;
     }
 
-    GetTuple(px, py, output->get_cursor_position());
-    int sx, sy;
-    wayfire_surface_t *new_focus = NULL;
-
-    output->workspace->for_each_view(
-        [&] (wayfire_view view)
-        {
-            if (new_focus) return; // we already found a focus surface
-
-            if (core->input->can_focus_surface(view.get())) // make sure focusing this surface isn't disabled
-                new_focus = view->map_input_coordinates(px, py, sx, sy);
-        }, WF_ALL_LAYERS);
-
-    update_cursor_focus(new_focus, sx, sy);
+    int lx, ly;
+    wayfire_surface_t *new_focus = input_surface_at(x, y, lx, ly);
+    update_cursor_focus(new_focus, lx, ly);
 
     auto compositor_surface = wf_compositor_surface_from_surface(new_focus);
     if (compositor_surface)
     {
-        compositor_surface->on_pointer_motion(sx, sy);
-    } else if (real_update)
+        compositor_surface->on_pointer_motion(lx, ly);
+    }
+    else if (real_update)
     {
-        wlr_seat_pointer_notify_motion(core->input->seat, time_msec, sx, sy);
+        wlr_seat_pointer_notify_motion(core->input->seat, time_msec, lx, ly);
     }
 
-    for (auto& icon : drag_icons)
-    {
-        if (icon->is_mapped())
-            icon->update_output_position();
-    }
+    update_drag_icons();
 }
 
 void input_manager::handle_pointer_motion(wlr_event_pointer_motion *ev)

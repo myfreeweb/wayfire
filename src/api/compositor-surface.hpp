@@ -44,10 +44,13 @@ class wayfire_compositor_surface_t : public wayfire_surface_t
         virtual void on_pointer_motion(int x, int y) {}
         virtual void on_pointer_button(uint32_t button, uint32_t state) {}
 
-        /* TODO: add touch events */
+        // XXX: supports only single touch
+        virtual void on_touch_down(int x, int y) {}
+        virtual void on_touch_up() {}
+        virtual void on_touch_motion(int x, int y) {}
 };
 
-wayfire_compositor_surface_t *wf_compositor_surface_from_surface(wayfire_surface_t *surface)
+static wayfire_compositor_surface_t *wf_compositor_surface_from_surface(wayfire_surface_t *surface)
 {
     return dynamic_cast<wayfire_compositor_surface_t*> (surface);
 }

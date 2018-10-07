@@ -16,6 +16,7 @@ extern "C"
 #include "keyboard.hpp"
 #include "cursor.hpp"
 #include "input-manager.hpp"
+#include "workspace-manager.hpp"
 #include "debug.hpp"
 
 bool input_manager::is_touch_enabled()
@@ -126,10 +127,7 @@ input_manager::input_manager()
         if (our_touch)
         {
             for (auto f : our_touch->gesture_recognizer.current)
-            {
-                int x, y;
-                update_touch_position(get_input_time(), f.first, f.second.sx, f.second.sy, x, y);
-            }
+                handle_touch_motion(get_input_time(), f.first, f.second.sx, f.second.sy);
         }
     };
 
@@ -234,6 +232,30 @@ bool input_manager::can_focus_surface(wayfire_surface_t *surface)
         return false;
 
     return true;
+}
+
+wayfire_surface_t* input_manager::input_surface_at(int x, int y,
+    int& lx, int& ly)
+{
+    auto output = core->get_output_at(x, y);
+    assert(output);
+
+    auto og = output->get_full_geometry();
+    x -= og.x;
+    y -= og.y;
+
+    wayfire_surface_t *new_focus = nullptr;
+    output->workspace->for_each_view(
+        [&] (wayfire_view view)
+        {
+            if (new_focus) return; // we already found a focus surface
+
+            if (can_focus_surface(view.get())) // make sure focusing this surface isn't disabled
+                new_focus = view->map_input_coordinates(x, y, lx, ly);
+        },
+        WF_ALL_LAYERS);
+
+    return new_focus;
 }
 
 void input_manager::set_exclusive_focus(wl_client *client)

@@ -109,6 +109,15 @@ static void handle_request_set_cursor(wl_listener*, void *data)
     core->input->set_cursor(ev);
 }
 
+void input_manager::update_drag_icons()
+{
+    for (auto& icon : drag_icons)
+    {
+        if (icon->is_mapped())
+            icon->update_output_position();
+    }
+}
+
 void input_manager::set_cursor(wlr_seat_pointer_request_set_cursor_event *ev)
 {
     auto focused_surface = ev->seat_client->seat->pointer_state.focused_surface;

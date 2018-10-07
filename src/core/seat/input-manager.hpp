@@ -72,11 +72,14 @@ class input_manager
 
         void handle_input_destroyed(wlr_input_device *dev);
 
-        void update_cursor_focus(wayfire_surface_t *focus, int x, int y);
-        void update_touch_focus(wayfire_surface_t *focus,
-                                uint32_t time, int id, int x, int y);
-        wayfire_surface_t* update_touch_position(uint32_t time, int id, int x, int y,
-                                                 int &sx, int &sy);
+        // returns the surface under the given global coordinates
+        // if no such surface (return NULL), lx and ly are undefined
+        wayfire_surface_t* input_surface_at(int x, int y,
+            int& lx, int& ly);
+
+        void set_touch_focus(wayfire_surface_t *surface, uint32_t time, int id, int lx, int ly);
+
+        void update_drag_icons();
 
         std::vector<std::unique_ptr<wf_keyboard>> keyboards;
 
@@ -93,6 +96,7 @@ class input_manager
 
         int last_cursor_event_msec;
         void update_cursor_position(uint32_t time_msec, bool real_update = true);
+        void update_cursor_focus(wayfire_surface_t *surface, int lx, int ly);
 
         wl_client *exclusive_client = NULL;
 

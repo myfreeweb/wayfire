@@ -243,24 +243,24 @@ class simple_decoration_surface : public wayfire_compositor_surface_t, public wf
             output->emit_signal("move-request", &move_request);
         }
 
-        void send_resize_request()
+        void send_resize_request(int x, int y)
         {
             resize_request_signal resize_request;
             resize_request.view = view;
-            resize_request.edges = get_edges();
+            resize_request.edges = get_edges(x, y);
             output->emit_signal("resize-request", &resize_request);
         }
 
-        uint32_t get_edges()
+        uint32_t get_edges(int x, int y)
         {
             uint32_t edges = 0;
-            if (cursor_x <= thickness)
+            if (x <= thickness)
                 edges |= WLR_EDGE_LEFT;
-            if (cursor_x >= width - thickness)
+            if (x >= width - thickness)
                 edges |= WLR_EDGE_RIGHT;
-            if (cursor_y <= thickness)
+            if (y <= thickness)
                 edges |= WLR_EDGE_TOP;
-            if (cursor_y >= height - thickness)
+            if (y >= height - thickness)
                 edges |= WLR_EDGE_BOTTOM;
 
             return edges;
@@ -275,7 +275,7 @@ class simple_decoration_surface : public wayfire_compositor_surface_t, public wf
 
         void update_cursor()
         {
-            core->set_cursor(get_cursor(get_edges()));
+            core->set_cursor(get_cursor(get_edges(cursor_x, cursor_y)));
         }
 
         virtual void on_pointer_button(uint32_t button, uint32_t state)
@@ -283,12 +283,18 @@ class simple_decoration_surface : public wayfire_compositor_surface_t, public wf
             if (button != BTN_LEFT || state != WLR_BUTTON_PRESSED)
                 return;
 
-            if (get_edges())
-                return send_resize_request();
+            if (get_edges(cursor_x, cursor_y))
+                return send_resize_request(cursor_x, cursor_y);
             send_move_request();
         }
 
-        /* TODO: add touch events */
+        virtual void on_touch_down(int x, int y)
+        {
+            if (get_edges(x, y))
+                return send_resize_request(x, y);
+
+            send_move_request();
+        }
 
         /* frame implementation */
         virtual wf_geometry expand_wm_geometry(wf_geometry contained_wm_geometry)
