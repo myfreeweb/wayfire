@@ -119,9 +119,20 @@ struct wf_layer_shell_manager
     void set_exclusive_zone(wayfire_layer_shell_view *v)
     {
         int edges = v->lsurface->current.anchor;
+
+        /* Special case we support */
+        if (__builtin_popcount(edges) == 3)
+        {
+            if ((edges & both_horiz) == both_horiz)
+                edges ^= both_horiz;
+
+            if ((edges & both_vert) == both_vert)
+                edges ^= both_vert;
+        }
+
         if (__builtin_popcount(edges) > 1)
         {
-            log_error ("Unsupported: layer-shell exclusive zone for surfaces anchored to multiple edges");
+            log_error ("Unsupported: layer-shell exclusive zone for surfaces anchored to 0, 2 or 4 edges");
             return;
         }
 
