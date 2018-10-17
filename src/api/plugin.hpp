@@ -16,33 +16,11 @@ extern "C"
 struct signal_data { };
 using signal_callback_t = std::function<void(signal_data*)>;
 
-struct wayfire_touch_gesture;
 using key_callback = std::function<void(uint32_t)>;
 using button_callback = std::function<void(uint32_t, int32_t, int32_t)>; // button, x, y
 using axis_callback = std::function<void(wlr_event_pointer_axis*)>;
 using touch_callback = std::function<void(int32_t, int32_t)>; // x, y
-using touch_gesture_callback = std::function<void(wayfire_touch_gesture*)>;
-
-enum wayfire_gesture_type {
-    GESTURE_NONE,
-    GESTURE_SWIPE,
-    GESTURE_EDGE_SWIPE,
-    GESTURE_PINCH
-};
-
-#define GESTURE_DIRECTION_LEFT (1 << 0)
-#define GESTURE_DIRECTION_RIGHT (1 << 1)
-#define GESTURE_DIRECTION_UP (1 << 2)
-#define GESTURE_DIRECTION_DOWN (1 << 3)
-#define GESTURE_DIRECTION_IN (1 << 4)
-#define GESTURE_DIRECTION_OUT (1 << 5)
-
-struct wayfire_touch_gesture
-{
-    wayfire_gesture_type type;
-    uint32_t direction;
-    int finger_count;
-};
+using touch_gesture_callback = std::function<void(wf_touch_gesture*)>;
 
 class wayfire_output;
 class wayfire_config;

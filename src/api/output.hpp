@@ -134,7 +134,7 @@ class wayfire_output
 
        /* we take only gesture type and finger count into account,
         * we send for all possible directions */
-       int add_gesture(const wayfire_touch_gesture& gesture, touch_gesture_callback* callback);
+       int add_gesture(wf_option option, touch_gesture_callback* callback);
        void rem_gesture(touch_gesture_callback*);
        void rem_gesture(int id);
 

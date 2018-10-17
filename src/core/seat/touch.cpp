@@ -94,7 +94,7 @@ void wf_gesture_recognizer::continue_gesture(int id, int sx, int sy)
 
     if (swipe_dir)
     {
-        wayfire_touch_gesture gesture;
+        wf_touch_gesture gesture;
         gesture.type = GESTURE_SWIPE;
         gesture.finger_count = current.size();
         gesture.direction = swipe_dir;
@@ -153,7 +153,7 @@ void wf_gesture_recognizer::continue_gesture(int id, int sx, int sy)
     bool outward_pinch = (start_sum_dist - sum_dist <= -MIN_PINCH_DISTANCE);
 
     if (inward_pinch || outward_pinch) {
-        wayfire_touch_gesture gesture;
+        wf_touch_gesture gesture;
         gesture.type = GESTURE_PINCH;
         gesture.finger_count = current.size();
         gesture.direction =
@@ -378,14 +378,15 @@ void input_manager::check_touch_bindings(int x, int y)
         (*call)(x, y);
 }
 
-void input_manager::handle_gesture(wayfire_touch_gesture g)
+void input_manager::handle_gesture(wf_touch_gesture g)
 {
     for (const auto& listener : gesture_listeners)
     {
-        const auto& direction = listener.second.gesture.direction;
-        if (listener.second.gesture.type == g.type &&
-            listener.second.gesture.finger_count == g.finger_count &&
-            (direction == 0 || direction == g.direction) &&
+        const auto& listener_value = listener.second.gesture->as_cached_gesture();
+        const auto& listener_direction = listener_value.direction;
+        if (listener_value.type == g.type &&
+            listener_value.finger_count == g.finger_count &&
+            (listener_direction == 0 || listener_direction == g.direction) &&
             core->get_active_output() == listener.second.output)
         {
             (*listener.second.call)(&g);

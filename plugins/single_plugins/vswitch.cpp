@@ -83,11 +83,7 @@ class vswitch : public wayfire_plugin_t
         output->add_key(key_win_up, &callback_win_up);
         output->add_key(key_win_down, &callback_win_down);
 
-        wayfire_touch_gesture activation_gesture;
-        activation_gesture.finger_count = 4;
-        activation_gesture.type = GESTURE_SWIPE;
-
-        gesture_cb = [=] (wayfire_touch_gesture *gesture) {
+        gesture_cb = [=] (wf_touch_gesture *gesture) {
              if (gesture->direction & GESTURE_DIRECTION_UP)
                 add_direction(0, 1);
             if (gesture->direction & GESTURE_DIRECTION_DOWN)
@@ -97,7 +93,11 @@ class vswitch : public wayfire_plugin_t
             if (gesture->direction & GESTURE_DIRECTION_RIGHT)
                 add_direction(-1, 0);
         };
-        output->add_gesture(activation_gesture, &gesture_cb);
+
+        output->add_gesture(new_static_option("swipe left 4"), &gesture_cb);
+        output->add_gesture(new_static_option("swipe right 4"), &gesture_cb);
+        output->add_gesture(new_static_option("swipe up 4"), &gesture_cb);
+        output->add_gesture(new_static_option("swipe down 4"), &gesture_cb);
 
         animation_duration = section->get_option("duration", "180");
         duration = wf_duration(animation_duration);

@@ -75,7 +75,7 @@ class wayfire_expo : public wayfire_plugin_t
             }
         };
 
-        touch_toggle_cb = [=] (wayfire_touch_gesture*) {
+        touch_toggle_cb = [=] (wf_touch_gesture*) {
             if (state.active)
                 deactivate();
             else
@@ -83,11 +83,7 @@ class wayfire_expo : public wayfire_plugin_t
         };
 
         output->add_key(toggle_key, &toggle_cb);
-
-        wayfire_touch_gesture activate_gesture;
-        activate_gesture.type = GESTURE_PINCH;
-        activate_gesture.finger_count = 3;
-        output->add_gesture(activate_gesture, &touch_toggle_cb);
+        output->add_gesture(new_static_option("pinch in 3"), &touch_toggle_cb);
 
         grab_interface->callbacks.pointer.button = [=] (uint32_t button, uint32_t state)
         {

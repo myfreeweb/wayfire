@@ -45,9 +45,11 @@ class input_manager
                     touch_down, touch_up, touch_motion;
 
         int gesture_id;
+        // XXX: should we move those to input-manager.cpp or
+        // maybe bring the *_callback_data back to this header? */
         struct wf_gesture_listener
         {
-            wayfire_touch_gesture gesture;
+            wf_option gesture;
             touch_gesture_callback* call;
             wayfire_output *output;
         };
@@ -138,7 +140,7 @@ class input_manager
         void handle_touch_motion(uint32_t time, int32_t id, int32_t x, int32_t y);
         void handle_touch_up    (uint32_t time, int32_t id);
 
-        void handle_gesture(wayfire_touch_gesture g);
+        void handle_gesture(wf_touch_gesture g);
 
         void check_touch_bindings(int32_t x, int32_t y);
 
@@ -158,8 +160,8 @@ class input_manager
         void rem_touch(int32_t id);
         void rem_touch(touch_callback*);
 
-        int add_gesture(const wayfire_touch_gesture& gesture,
-                        touch_gesture_callback* callback, wayfire_output *output);
+        int add_gesture(wf_option, touch_gesture_callback* callback,
+            wayfire_output *output);
         void rem_gesture(int id);
         void rem_gesture(touch_gesture_callback*);
 };

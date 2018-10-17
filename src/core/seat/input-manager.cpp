@@ -373,10 +373,10 @@ void input_manager::rem_touch(touch_callback *tc)
         rem_touch(x);
 }
 
-int input_manager::add_gesture(const wayfire_touch_gesture& gesture,
-        touch_gesture_callback *callback, wayfire_output *output)
+int input_manager::add_gesture(wf_option option, touch_gesture_callback *callback,
+    wayfire_output *output)
 {
-    gesture_listeners[gesture_id] = {gesture, callback, output};
+    gesture_listeners[gesture_id] = {option, callback, output};
     gesture_id++;
     return gesture_id - 1;
 }

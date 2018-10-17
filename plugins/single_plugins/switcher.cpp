@@ -127,7 +127,7 @@ class WayfireSwitcher : public wayfire_plugin_t
                 handle_done();
         };
 
-        touch_activate = [=] (wayfire_touch_gesture*) {
+        touch_activate = [=] (wf_touch_gesture*) {
             if (!active)
             {
                 /* We set it to -1 to indicate that the user hasn't done anything yet */
@@ -137,12 +137,7 @@ class WayfireSwitcher : public wayfire_plugin_t
                 handle_done();
             }
         };
-
-        wayfire_touch_gesture gesture;
-        gesture.type = GESTURE_EDGE_SWIPE;
-        gesture.direction = GESTURE_DIRECTION_DOWN;
-        gesture.finger_count = 3;
-        output->add_gesture(gesture, &touch_activate);
+        output->add_gesture(new_static_option("edge-swipe down 3"), &touch_activate);
 
         grab_interface->callbacks.touch.down = [=] (int id, int x, int y) {
             if (id == 0) handle_touch_down(x, y);

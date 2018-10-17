@@ -803,8 +803,8 @@ void wayfire_output::rem_touch(int32_t id)
     core->input->rem_touch(id);
 }
 
-int wayfire_output::add_gesture(const wayfire_touch_gesture& gesture,
-                                touch_gesture_callback* callback)
+int wayfire_output::add_gesture(wf_option gesture,
+    touch_gesture_callback* callback)
 {
     return core->input->add_gesture(gesture, callback, this);
 }
