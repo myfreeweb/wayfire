@@ -382,8 +382,10 @@ void input_manager::handle_gesture(wayfire_touch_gesture g)
 {
     for (const auto& listener : gesture_listeners)
     {
+        const auto& direction = listener.second.gesture.direction;
         if (listener.second.gesture.type == g.type &&
             listener.second.gesture.finger_count == g.finger_count &&
+            (direction == 0 || direction == g.direction) &&
             core->get_active_output() == listener.second.output)
         {
             (*listener.second.call)(&g);
