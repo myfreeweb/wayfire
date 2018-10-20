@@ -139,6 +139,13 @@ extern "C"
     }
 }
 
+static uint32_t get_time()
+{
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000ll + ts.tv_nsec / 1000000ll;
+}
+
 class wf_wobbly : public wf_view_transformer_t
 {
     wayfire_view view;
@@ -153,6 +160,7 @@ class wf_wobbly : public wf_view_transformer_t
 
     wlr_box last_boundingbox;
     wf_geometry snapped_geometry;
+    uint32_t last_frame;
 
     public:
     wf_wobbly(wayfire_view view, wayfire_grab_interface iface)
@@ -177,6 +185,7 @@ class wf_wobbly : public wf_view_transformer_t
         model->v = NULL;
         model->uv = NULL;
 
+        last_frame = get_time();
         wobbly_init(model.get());
 
         pre_hook = [=] () {
@@ -230,7 +239,10 @@ class wf_wobbly : public wf_view_transformer_t
         if (snapped_geometry.width <= 0)
             resize(last_boundingbox.width, last_boundingbox.height);
 
-        wobbly_prepare_paint(model.get(), 16);
+        auto now = get_time();
+        wobbly_prepare_paint(model.get(), now - last_frame);
+        last_frame = now;
+
         wobbly_add_geometry(model.get());
         wobbly_done_paint(model.get());
 
