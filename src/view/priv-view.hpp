@@ -13,9 +13,6 @@
 wayfire_surface_t* wf_surface_from_void(void *handle);
 wayfire_view_t* wf_view_from_void(void *handle);
 
-void emit_title_changed(wayfire_view view);
-void emit_app_id_changed(wayfire_view view);
-
 void init_xdg_shell_v6();
 void init_xdg_shell();
 void init_xwayland();

@@ -164,14 +164,14 @@ static void handle_xdg_set_title(wl_listener *listener, void *data)
 {
     auto surface = static_cast<wlr_xdg_surface*> (data);
     auto view = wf_view_from_void(surface->data);
-    emit_title_changed(view->self());
+    view->handle_title_changed();
 }
 
 static void handle_xdg_set_app_id(wl_listener *listener, void *data)
 {
     auto surface = static_cast<wlr_xdg_surface*> (data);
     auto view = wf_view_from_void(surface->data);
-    emit_app_id_changed(view->self());
+    view->handle_app_id_changed();
 }
 
 wayfire_xdg_view::wayfire_xdg_view(wlr_xdg_surface *s)
@@ -255,6 +255,7 @@ void wayfire_xdg_view::map(wlr_surface *surface)
     }
 
     wayfire_view_t::map(surface);
+    create_toplevel();
 }
 
 void wayfire_xdg_view::get_child_offset(int &x, int &y)

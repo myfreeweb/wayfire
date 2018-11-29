@@ -32,6 +32,7 @@ struct wlr_virtual_keyboard_manager_v1;
 struct wlr_idle;
 struct wlr_idle_inhibit_manager_v1;
 struct wlr_screencopy_manager_v1;
+struct wlr_foreign_toplevel_manager_v1;
 
 #include <wayland-server.h>
 }
@@ -97,6 +98,7 @@ class wayfire_core : public wf_object_base
             wlr_input_inhibit_manager *input_inhibit;
             wlr_idle *idle;
             wlr_idle_inhibit_manager_v1 *idle_inhibit;
+            wlr_foreign_toplevel_manager_v1 *toplevel_manager;
             wayfire_shell *wf_shell;
         } protocols;
 

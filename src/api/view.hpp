@@ -13,6 +13,7 @@
 extern "C"
 {
 #include <wlr/types/wlr_box.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_surface.h>
 #include <wlr/util/edges.h>
 }
@@ -59,6 +60,7 @@ class wayfire_surface_t
 
         static std::map<std::string, int> shrink_constraints;
         static int maximal_shrink_constraint;
+
     public:
         /* NOT API */
         wayfire_surface_t *parent_surface;
@@ -217,8 +219,29 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
 
         /* Same as damage(), but don't transform box */
         void damage_raw(const wlr_box& box);
-    public:
 
+        /* The toplevel is created by the individual view's mapping functions,
+         * i.e in xdg-shell, xwayland, etc.
+         * The handle is automatically destroyed when the view is unmapped */
+        wlr_foreign_toplevel_handle_v1 *toplevel_handle = NULL;
+
+        /* Create/destroy the toplevel_handle */
+        virtual void create_toplevel();
+        virtual void destroy_toplevel();
+
+        /* The following are no-op if toplevel_handle == NULL */
+        virtual void toplevel_send_title();
+        virtual void toplevel_send_app_id();
+        virtual void toplevel_send_state();
+        virtual void toplevel_update_output(wayfire_output *output, bool enter);
+
+    public: // NOT API
+        /* The handle_{app_id, title}_changed emit the corresponding signal
+         * and if there is a toplevel_handle, they send the updated values */
+        virtual void handle_app_id_changed();
+        virtual void handle_title_changed();
+
+    public:
         /* these represent toplevel relations, children here are transient windows,
          * such as the close file dialogue */
         wayfire_view parent = nullptr;
@@ -226,6 +249,7 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         virtual void set_toplevel_parent(wayfire_view parent);
         virtual void set_output(wayfire_output*);
 
+        virtual void set_role(wf_view_role new_role);
         wf_view_role role = WF_VIEW_ROLE_TOPLEVEL;
 
         wayfire_view_t();
@@ -295,7 +319,7 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         virtual void set_resizing(bool resizing, uint32_t edges = 0);
         virtual void set_moving(bool moving);
 
-        bool maximized = false, fullscreen = false;
+        bool maximized = false, fullscreen = false, activated = false;
 
         virtual void set_maximized(bool maxim);
         virtual void set_fullscreen(bool fullscreen);

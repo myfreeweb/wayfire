@@ -3,6 +3,7 @@ extern "C"
 #include <wlr/types/wlr_screenshooter.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_idle.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_input_inhibitor.h>
@@ -165,6 +166,7 @@ void wayfire_core::init(wayfire_config *conf)
     protocols.idle_inhibit = wlr_idle_inhibit_v1_create(display);
 
     protocols.wf_shell = wayfire_shell_create(display);
+    protocols.toplevel_manager = wlr_foreign_toplevel_manager_v1_create(display);
 
 #ifdef BUILD_WITH_IMAGEIO
     image_io::init();

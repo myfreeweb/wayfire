@@ -158,14 +158,14 @@ static void handle_v6_set_title(wl_listener *listener, void *data)
 {
     auto surface = static_cast<wlr_xdg_surface_v6*> (data);
     auto view = wf_view_from_void(surface->data);
-    emit_title_changed(view->self());
+    view->handle_title_changed();
 }
 
 static void handle_v6_set_app_id(wl_listener *listener, void *data)
 {
     auto surface = static_cast<wlr_xdg_surface_v6*> (data);
     auto view = wf_view_from_void(surface->data);
-    emit_app_id_changed(view->self());
+    view->handle_app_id_changed();
 }
 
 wayfire_xdg6_view::wayfire_xdg6_view(wlr_xdg_surface_v6 *s)

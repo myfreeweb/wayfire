@@ -125,7 +125,7 @@ static void zwf_output_get_wm_surface(struct wl_client *client,
     auto wfo = wl_resource_create(client, &zwf_wm_surface_v1_interface, 1, id);
     wl_resource_set_implementation(wfo, &zwf_wm_surface_v1_implementation, view.get(), NULL);
 
-    view->role = WF_VIEW_ROLE_SHELL_VIEW;
+    view->set_role(WF_VIEW_ROLE_SHELL_VIEW);
     view->get_output()->detach_view(view);
     view->set_output(wo);
 

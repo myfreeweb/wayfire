@@ -41,17 +41,114 @@ std::string wayfire_view_t::to_string() const
     return "view-" + wf_object_base::to_string();
 }
 
+void wayfire_view_t::create_toplevel()
+{
+    if (toplevel_handle)
+        return;
+
+    /* We don't want to create toplevels for shell views or xwayland menus */
+    if (role != WF_VIEW_ROLE_TOPLEVEL)
+        return;
+
+    toplevel_handle = wlr_foreign_toplevel_handle_v1_create(
+        core->protocols.toplevel_manager);
+
+    toplevel_send_title();
+    toplevel_send_app_id();
+    toplevel_send_state();
+    toplevel_update_output(output, true);
+}
+
+void wayfire_view_t::destroy_toplevel()
+{
+    if (!toplevel_handle)
+        return;
+
+    wlr_foreign_toplevel_handle_v1_destroy(toplevel_handle);
+    toplevel_handle = NULL;
+}
+
+void wayfire_view_t::toplevel_send_title()
+{
+    if (!toplevel_handle)
+        return;
+    wlr_foreign_toplevel_handle_v1_set_title(toplevel_handle,
+        get_title().c_str());
+}
+
+void wayfire_view_t::toplevel_send_app_id()
+{
+    if (!toplevel_handle)
+        return;
+    wlr_foreign_toplevel_handle_v1_set_app_id(toplevel_handle,
+        get_app_id().c_str());
+}
+
+void wayfire_view_t::toplevel_send_state()
+{
+    if (!toplevel_handle)
+        return;
+
+    wlr_foreign_toplevel_handle_v1_set_maximized(toplevel_handle, maximized);
+    wlr_foreign_toplevel_handle_v1_set_activated(toplevel_handle, activated);
+}
+
+void wayfire_view_t::toplevel_update_output(wayfire_output *wo, bool enter)
+{
+    if (!wo || !toplevel_handle)
+        return;
+
+    if (enter) {
+        wlr_foreign_toplevel_handle_v1_output_enter(
+            toplevel_handle, wo->handle);
+    } else {
+        wlr_foreign_toplevel_handle_v1_output_leave(
+            toplevel_handle, wo->handle);
+    }
+}
+
+void wayfire_view_t::handle_title_changed()
+{
+    title_changed_signal data;
+    data.view = self();
+    if (output)
+        output->emit_signal("view-title-changed", &data);
+    emit_signal("title-changed", &data);
+
+    toplevel_send_title();
+}
+
+void wayfire_view_t::handle_app_id_changed()
+{
+    app_id_changed_signal data;
+    data.view = self();
+    if (output)
+        output->emit_signal("view-app-id-changed", &data);
+    emit_signal("app-id-changed", &data);
+
+    toplevel_send_app_id();
+}
+
 void wayfire_view_t::set_output(wayfire_output *wo)
 {
     _output_signal data;
     data.output = output;
 
+    toplevel_update_output(output, false);
     wayfire_surface_t::set_output(wo);
     if (decoration)
         decoration->set_output(wo);
 
+    toplevel_update_output(wo, true);
     if (wo != data.output)
         emit_signal("set-output", &data);
+}
+
+void wayfire_view_t::set_role(wf_view_role new_role)
+{
+    if (new_role != WF_VIEW_ROLE_TOPLEVEL)
+        destroy_toplevel();
+    role = new_role;
 }
 
 wayfire_view wayfire_view_t::self()
@@ -298,6 +395,8 @@ void wayfire_view_t::set_maximized(bool maxim)
 
     if (frame)
         frame->notify_view_maximized();
+
+    toplevel_send_state();
 }
 
 void wayfire_view_t::set_fullscreen(bool full)
@@ -323,6 +422,8 @@ void wayfire_view_t::set_fullscreen(bool full)
             saved_layer == 0 ? (uint32_t)WF_LAYER_WORKSPACE : saved_layer);
         saved_layer = 0;
     }
+
+    toplevel_send_state();
 }
 
 void wayfire_view_t::activate(bool active)
@@ -335,8 +436,11 @@ void wayfire_view_t::activate(bool active)
     if (role == WF_VIEW_ROLE_SHELL_VIEW)
     {
         if (!active)
-            activate(true);
+            return activate(true);
     }
+
+    activated = active;
+    toplevel_send_state();
 }
 
 void wayfire_view_t::close()
@@ -763,6 +867,7 @@ void emit_view_unmap(wayfire_view view)
 void wayfire_view_t::unmap()
 {
     _is_mapped = false;
+    destroy_toplevel();
 
     if (parent)
         set_toplevel_parent(nullptr);
@@ -904,25 +1009,6 @@ void wayfire_view_t::set_toplevel_parent(wayfire_view new_parent)
 
 wayfire_view_t::~wayfire_view_t()
 {
-}
-
-void emit_title_changed(wayfire_view view)
-{
-    if (!view)
-        return;
-    title_changed_signal data;
-    data.view = view;
-    view->get_output()->emit_signal("view-title-changed", &data);
-}
-
-void emit_app_id_changed(wayfire_view view)
-{
-    if (!view)
-        return;
-
-    app_id_changed_signal data;
-    data.view = view;
-    view->get_output()->emit_signal("view-app-id-changed", &data);
 }
 
 void init_desktop_apis()

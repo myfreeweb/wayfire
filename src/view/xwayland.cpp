@@ -120,14 +120,14 @@ static void handle_xwayland_set_title(wl_listener *listener, void *data)
 {
     auto surface = static_cast<wlr_xwayland_surface*> (data);
     auto view = wf_view_from_void(surface->data);
-    emit_title_changed(view->self());
+    view->handle_title_changed();
 }
 
 static void handle_xwayland_set_app_id(wl_listener *listener, void *data)
 {
     auto surface = static_cast<wlr_xwayland_surface*> (data);
     auto view = wf_view_from_void(surface->data);
-    emit_app_id_changed(view->self());
+    view->handle_app_id_changed();
 }
 
 class wayfire_xwayland_view : public wayfire_view_t
@@ -238,6 +238,7 @@ class wayfire_xwayland_view : public wayfire_view_t
             move(xw->x - real_output.x, xw->y - real_output.y, false);
 
         wayfire_view_t::map(surface);
+        create_toplevel();
     }
 
     bool is_subsurface() { return false; }
@@ -503,7 +504,6 @@ void wayfire_unmanaged_xwayland_view::resize(int w, int h, bool s)
     send_configure();
 }
 
-/* TODO: bad with decoration */
 void wayfire_unmanaged_xwayland_view::set_geometry(wf_geometry g)
 {
     damage();
@@ -527,7 +527,6 @@ void wayfire_unmanaged_xwayland_view::close()
     wlr_xwayland_surface_close(xw);
 }
 
-
 wlr_surface *wayfire_unmanaged_xwayland_view::get_keyboard_focus_surface()
 {
     if (!wlr_xwayland_or_surface_wants_focus(xw))
@@ -544,7 +543,6 @@ void wayfire_unmanaged_xwayland_view::destroy()
 
     wayfire_view_t::destroy();
 }
-
 
 void notify_xwayland_created(wl_listener *, void *data)
 {
