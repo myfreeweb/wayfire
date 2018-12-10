@@ -225,6 +225,9 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
          * The handle is automatically destroyed when the view is unmapped */
         wlr_foreign_toplevel_handle_v1 *toplevel_handle = NULL;
 
+        wl_listener toplevel_handle_v1_maximize_request,
+                    toplevel_handle_v1_activate_request;
+
         /* Create/destroy the toplevel_handle */
         virtual void create_toplevel();
         virtual void destroy_toplevel();
