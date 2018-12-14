@@ -243,6 +243,7 @@ void wayfire_xdg6_view::map(wlr_surface *surface)
     }
 
     wayfire_view_t::map(surface);
+    create_toplevel();
 }
 
 void wayfire_xdg6_view::get_child_offset(int &x, int &y)
