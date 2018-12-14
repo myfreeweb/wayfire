@@ -610,7 +610,7 @@ wayfire_view wayfire_output::get_view_at_point(int x, int y)
             if (chosen == nullptr)
                 chosen = v;
         }
-    }, WF_ALL_LAYERS);
+    }, WF_VISIBLE_LAYERS);
 
     return chosen;
 }

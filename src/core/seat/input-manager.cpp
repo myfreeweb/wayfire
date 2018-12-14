@@ -260,7 +260,7 @@ wayfire_surface_t* input_manager::input_surface_at(int x, int y,
             if (can_focus_surface(view.get())) // make sure focusing this surface isn't disabled
                 new_focus = view->map_input_coordinates(x, y, lx, ly);
         },
-        WF_ALL_LAYERS);
+        WF_VISIBLE_LAYERS);
 
     return new_focus;
 }

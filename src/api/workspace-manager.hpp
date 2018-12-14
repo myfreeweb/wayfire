@@ -22,17 +22,19 @@ enum wf_layer
     WF_LAYER_XWAYLAND   = (1 << 3),
     WF_LAYER_TOP        = (1 << 4),
     WF_LAYER_FULLSCREEN = (1 << 5),
-    WF_LAYER_LOCK       = (1 << 6)
+    WF_LAYER_LOCK       = (1 << 6),
+    WF_LAYER_MINIMIZED  = (1 << 7)
 };
 
-#define WF_TOTAL_LAYERS 7
+#define WF_TOTAL_LAYERS 8
 
 #define WF_WM_LAYERS     (WF_LAYER_WORKSPACE  | WF_LAYER_FULLSCREEN)
 #define WF_MIDDLE_LAYERS (WF_WM_LAYERS        | WF_LAYER_XWAYLAND)
 #define WF_ABOVE_LAYERS  (WF_LAYER_TOP        | WF_LAYER_LOCK)
 #define WF_BELOW_LAYERS  (WF_LAYER_BACKGROUND | WF_LAYER_BOTTOM)
 
-#define WF_ALL_LAYERS    (WF_MIDDLE_LAYERS | WF_ABOVE_LAYERS | WF_BELOW_LAYERS)
+#define WF_VISIBLE_LAYERS (WF_MIDDLE_LAYERS | WF_ABOVE_LAYERS | WF_BELOW_LAYERS)
+#define WF_ALL_LAYERS     (WF_VISIBLE_LAYERS | WF_LAYER_MINIMIZED)
 
 /* return all layers not below layer, ie. layers above it + the layer itself */
 uint32_t wf_all_layers_not_below(uint32_t layer);

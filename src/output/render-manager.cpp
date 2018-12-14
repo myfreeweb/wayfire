@@ -418,7 +418,7 @@ void render_manager::post_paint()
     /* TODO: do this only if the view isn't fully occluded by another */
     if (renderer)
     {
-        output->workspace->for_each_view(send_frame_done, WF_ALL_LAYERS);
+        output->workspace->for_each_view(send_frame_done, WF_VISIBLE_LAYERS);
     } else
     {
         auto views = output->workspace->get_views_on_workspace(
@@ -586,7 +586,8 @@ void render_manager::workspace_stream_update(wf_workspace_stream *stream,
         emit_signal("workspace-stream-pre", &data);
     }
 
-    auto views = output->workspace->get_views_on_workspace(stream->ws, WF_ALL_LAYERS, false);
+    auto views = output->workspace->get_views_on_workspace(
+        stream->ws, WF_VISIBLE_LAYERS, false);
 
     struct damaged_surface_t
     {
