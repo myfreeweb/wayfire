@@ -58,7 +58,7 @@ class wayfire_grid_view_cdata : public wf_custom_data_t
         };
 
         output->render->auto_redraw(true);
-        output->connect_signal("unmap-view", &unmapped);
+        output->connect_signal("view-disappeared", &unmapped);
         output->connect_signal("detach-view", &unmapped);
     }
 
@@ -131,7 +131,7 @@ class wayfire_grid_view_cdata : public wf_custom_data_t
         output->render->rem_effect(&pre_hook, WF_OUTPUT_EFFECT_PRE);
         output->deactivate_plugin(iface);
         output->render->auto_redraw(false);
-        output->disconnect_signal("unmap-view", &unmapped);
+        output->disconnect_signal("view-disappeared", &unmapped);
         output->disconnect_signal("detach-view", &unmapped);
     }
 };
@@ -158,7 +158,7 @@ class wf_grid_saved_view_geometry : public wf_custom_data_t
 
 class wayfire_grid : public wayfire_plugin_t
 {
-    signal_callback_t output_resized_cb, view_destroyed_cb;
+    signal_callback_t output_resized_cb;
 
 
     std::vector<std::string> slots = {"unused", "bl", "b", "br", "l", "c", "r", "tl", "t", "tr"};
@@ -365,8 +365,6 @@ class wayfire_grid : public wayfire_plugin_t
         output->disconnect_signal("view-maximized-request", &maximized_cb);
         output->disconnect_signal("view-fullscreen-request", &fullscreen_cb);
         output->disconnect_signal("output-resized", &output_resized_cb);
-        output->disconnect_signal("unmap-view", &view_destroyed_cb);
-        output->disconnect_signal("detach-view", &view_destroyed_cb);
     }
 };
 

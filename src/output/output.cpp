@@ -266,16 +266,14 @@ wayfire_output::wayfire_output(wlr_output *handle, wayfire_config *c)
     render = new render_manager(this);
     plugin = new plugin_manager(this, c);
 
-    unmap_view_cb = [=] (signal_data *data)
+    view_disappeared_cb = [=] (signal_data *data)
     {
         auto view = get_signaled_view(data);
-
-        log_info("unmapped view %p, active is %p", view.get(), active_view.get());
         if (view == active_view)
             refocus(active_view, workspace->get_view_layer(view));
     };
 
-    connect_signal("unmap-view", &unmap_view_cb);
+    connect_signal("view-disappeared", &view_disappeared_cb);
 }
 
 std::string wayfire_output::to_string() const
@@ -531,7 +529,6 @@ void wayfire_output::set_active_view(wayfire_view v, wlr_seat *seat)
         seat = core->get_current_seat();
 
     bool refocus = (active_view == v);
-    log_info("set active view %p", v.get());
 
     /* don't deactivate view if the next focus is not a toplevel */
     if (v == nullptr || v->role == WF_VIEW_ROLE_TOPLEVEL)

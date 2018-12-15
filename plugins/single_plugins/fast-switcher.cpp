@@ -126,7 +126,7 @@ class wayfire_fast_switcher : public wayfire_plugin_t
         grab_interface->grab();
         switch_next();
 
-        output->connect_signal("unmap-view", &destroyed);
+        output->connect_signal("view-disappeared", &destroyed);
         output->connect_signal("detach-view", &destroyed);
     }
 
@@ -142,7 +142,7 @@ class wayfire_fast_switcher : public wayfire_plugin_t
         output->deactivate_plugin(grab_interface);
         active = false;
 
-        output->disconnect_signal("unmap-view", &destroyed);
+        output->disconnect_signal("view-disappeared", &destroyed);
         output->disconnect_signal("detach-view", &destroyed);
     }
 

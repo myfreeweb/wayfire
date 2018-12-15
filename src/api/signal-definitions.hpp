@@ -15,6 +15,11 @@ using create_view_signal     = _view_signal;
 using destroy_view_signal    = _view_signal;
 using map_view_signal        = _view_signal;
 using unmap_view_signal      = _view_signal;
+
+/* Indicates the view is no longer available, for ex. it has been minimized
+ * or unmapped */
+using view_disappeared_signal = _view_signal;
+
 using focus_view_signal      = _view_signal;
 using view_set_parent_signal = _view_signal;
 using move_request_signal    = _view_signal;
@@ -48,7 +53,14 @@ bool get_signaled_state(signal_data *data);
 using view_maximized_signal = _view_state_signal;
 using view_fullscreen_signal = _view_state_signal;
 
-
+struct view_minimize_request_signal : public _view_state_signal
+{
+    /* If some plugin wants to delay the (un)minimize of the view, it needs to
+     * listen for the view-minimize-request and set carried_out to true.
+     * It is a hint to core that the action will be (or already was) performed
+     * by a plugin, and minimized state shouldn't be further changed by core */
+    bool carried_out = false;
+};
 
 /* same as both change_viewport_request and change_viewport_notify */
 struct change_viewport_signal : public signal_data

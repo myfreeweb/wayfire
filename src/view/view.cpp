@@ -49,6 +49,14 @@ static void handle_toplevel_handle_v1_maximize_request(wl_listener*, void *data)
     view->maximize_request(ev->maximized);
 }
 
+static void handle_toplevel_handle_v1_minimize_request(wl_listener*, void *data)
+{
+    auto ev = static_cast<wlr_foreign_toplevel_handle_v1_minimized_event*> (data);
+    auto view = wf_view_from_void(ev->toplevel->data);
+
+    view->minimize_request(ev->minimized);
+}
+
 static void handle_toplevel_handle_v1_activate_request(wl_listener*, void *data)
 {
     auto ev = static_cast<wlr_foreign_toplevel_handle_v1_activated_event*> (data);
@@ -72,10 +80,14 @@ void wayfire_view_t::create_toplevel()
 
     toplevel_handle_v1_maximize_request.notify =
         handle_toplevel_handle_v1_maximize_request;
+    toplevel_handle_v1_minimize_request.notify =
+        handle_toplevel_handle_v1_minimize_request;
     toplevel_handle_v1_activate_request.notify =
         handle_toplevel_handle_v1_activate_request;
     wl_signal_add(&toplevel_handle->events.request_maximize,
         &toplevel_handle_v1_maximize_request);
+    wl_signal_add(&toplevel_handle->events.request_minimize,
+        &toplevel_handle_v1_minimize_request);
     wl_signal_add(&toplevel_handle->events.request_activate,
         &toplevel_handle_v1_activate_request);
 
@@ -121,6 +133,7 @@ void wayfire_view_t::toplevel_send_state()
 
     wlr_foreign_toplevel_handle_v1_set_maximized(toplevel_handle, maximized);
     wlr_foreign_toplevel_handle_v1_set_activated(toplevel_handle, activated);
+    wlr_foreign_toplevel_handle_v1_set_minimized(toplevel_handle, minimized);
 }
 
 void wayfire_view_t::toplevel_update_output(wayfire_output *wo, bool enter)
@@ -425,6 +438,26 @@ void wayfire_view_t::set_maximized(bool maxim)
 
     if (frame)
         frame->notify_view_maximized();
+
+    toplevel_send_state();
+}
+
+void wayfire_view_t::set_minimized(bool minim)
+{
+    minimized = minim;
+    if (minimized)
+    {
+        view_disappeared_signal data;
+        data.view = self();
+        emit_signal("disappear", &data);
+        output->emit_signal("view-disappeared", &data);
+
+        output->workspace->add_view_to_layer(self(), WF_LAYER_MINIMIZED);
+    } else
+    {
+        output->workspace->add_view_to_layer(self(), WF_LAYER_WORKSPACE);
+        output->focus_view(self());
+    }
 
     toplevel_send_state();
 }
@@ -891,7 +924,9 @@ void emit_view_unmap(wayfire_view view)
     data.view = view;
 
     view->get_output()->emit_signal("unmap-view", &data);
+    view->get_output()->emit_signal("view-disappeared", &data);
     view->emit_signal("unmap", &data);
+    view->emit_signal("disappeared", &data);
 }
 
 void wayfire_view_t::unmap()
@@ -946,6 +981,24 @@ void wayfire_view_t::maximize_request(bool state)
         set_geometry(output->workspace->get_workarea());
         set_maximized(state);
         output->emit_signal("view-maximized", &data);
+    }
+}
+
+void wayfire_view_t::minimize_request(bool state)
+{
+    if (state == minimized)
+        return;
+
+    view_minimize_request_signal data;
+    data.view = self();
+    data.state = state;
+
+    if (is_mapped())
+    {
+        output->emit_signal("view-minimize-request", &data);
+        /* No plugin took care of the request, do some default action */
+        if (!data.carried_out)
+            set_minimized(state);
     }
 }
 

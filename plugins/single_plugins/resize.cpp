@@ -107,7 +107,7 @@ class wayfire_resize : public wayfire_plugin_t
         };
 
         output->connect_signal("detach-view", &view_destroyed);
-        output->connect_signal("unmap-view", &view_destroyed);
+        output->connect_signal("view-disappeared", &view_destroyed);
     }
 
     void resize_requested(signal_data *data)
@@ -287,7 +287,7 @@ class wayfire_resize : public wayfire_plugin_t
 
         output->disconnect_signal("resize-request", &resize_request);
         output->disconnect_signal("detach-view", &view_destroyed);
-        output->disconnect_signal("unmap-view", &view_destroyed);
+        output->disconnect_signal("view-disappeared", &view_destroyed);
     }
 };
 

@@ -32,7 +32,7 @@ class wayfire_output : public wf_object_base
        wayfire_view active_view, last_active_toplevel;
 
        wl_listener destroy_listener;
-       signal_callback_t unmap_view_cb;
+       signal_callback_t view_disappeared_cb;
 
        wf_option_callback config_mode_changed,
                           config_transform_changed,

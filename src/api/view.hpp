@@ -226,7 +226,8 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         wlr_foreign_toplevel_handle_v1 *toplevel_handle = NULL;
 
         wl_listener toplevel_handle_v1_maximize_request,
-                    toplevel_handle_v1_activate_request;
+                    toplevel_handle_v1_activate_request,
+                    toplevel_handle_v1_minimize_request;
 
         /* Create/destroy the toplevel_handle */
         virtual void create_toplevel();
@@ -322,8 +323,10 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         virtual void set_resizing(bool resizing, uint32_t edges = 0);
         virtual void set_moving(bool moving);
 
-        bool maximized = false, fullscreen = false, activated = false;
+        bool maximized = false, fullscreen = false, activated = false, minimized = false;
 
+        /* Will also move the view to/from the minimized layer, if necessary */
+        virtual void set_minimized(bool minimized);
         virtual void set_maximized(bool maxim);
         virtual void set_fullscreen(bool fullscreen);
 
@@ -343,12 +346,12 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         virtual std::string get_app_id() { return ""; }
         virtual std::string get_title() { return ""; }
 
-
         /* Set if the current view should not be rendered by built-in renderer */
         bool is_hidden = false;
 
         virtual void move_request();
         virtual void resize_request(uint32_t edges = 0);
+        virtual void minimize_request(bool state);
         virtual void maximize_request(bool state);
         virtual void fullscreen_request(wayfire_output *output, bool state);
 

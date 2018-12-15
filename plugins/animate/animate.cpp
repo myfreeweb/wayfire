@@ -73,7 +73,7 @@ struct animation_hook
         output->connect_signal("detach-view", &view_removed);
 
         if (!close_animation)
-            output->connect_signal("unmap-view", &view_removed);
+            output->connect_signal("view-disappeared", &view_removed);
     }
 
     void finalize()
@@ -81,7 +81,7 @@ struct animation_hook
         output->render->rem_effect(&hook, WF_OUTPUT_EFFECT_POST);
 
         output->disconnect_signal("detach-view", &view_removed);
-        output->disconnect_signal("unmap-view", &view_removed);
+        output->disconnect_signal("view-disappeared", &view_removed);
 
         /* make sure we "unhide" the view */
         view->alpha = 1.0;
