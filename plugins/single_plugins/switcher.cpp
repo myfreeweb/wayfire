@@ -159,7 +159,6 @@ class WayfireSwitcher : public wayfire_plugin_t
 
     void handle_view_removed(wayfire_view view)
     {
-        log_info("handle view removed !!!!!!!!!!!");
         // not running at all, don't care
         if (!output->is_plugin_active(grab_interface->name))
             return;
@@ -376,6 +375,16 @@ class WayfireSwitcher : public wayfire_plugin_t
         return std::min(needed_exact, 1.0f) * view_thumbnail_scale->as_cached_double();
     }
 
+    /* Calculate alpha for the view when switcher is inactive. */
+    float get_view_normal_alpha(wayfire_view view)
+    {
+        /* Usually views are visible, but if they were minimized,
+         * and we aren't restoring the view, it has target alpha 0.0 */
+        if (view->minimized && (views.empty() || view != views[0].view))
+            return 0.0;
+        return 1.0;
+    }
+
     /* Move untransformed view to the center */
     void arrange_center_view(SwitcherView& sv)
     {
@@ -391,6 +400,7 @@ class WayfireSwitcher : public wayfire_plugin_t
         float scale = calculate_scaling_factor(bbox);
         sv.attribs.scale_x = {1, scale};
         sv.attribs.scale_y = {1, scale};
+        sv.attribs.alpha = {get_view_normal_alpha(sv.view), 1.0};
     }
 
     /* Position the view, starting from untransformed position */
@@ -409,7 +419,8 @@ class WayfireSwitcher : public wayfire_plugin_t
     std::vector<wayfire_view> get_workspace_views() const
     {
         auto all_views = output->workspace->get_views_on_workspace(
-            output->workspace->get_current_workspace(), WF_WM_LAYERS, true);
+            output->workspace->get_current_workspace(),
+            WF_WM_LAYERS | WF_LAYER_MINIMIZED, true);
 
         decltype(all_views) mapped_views;
         for (auto view : all_views)
@@ -431,7 +442,11 @@ class WayfireSwitcher : public wayfire_plugin_t
         // calculate focus index & focus it
         int focused_view_index = (size + dir) % size;
         auto focused_view = ws_views[focused_view_index];
-        output->focus_view(focused_view);
+
+        /* If the focused view is minimized, we don't want to focus it
+         * even if it comes to the front, because that will unminimize it. */
+        if (!focused_view->minimized)
+            output->focus_view(focused_view);
     }
 
     /* Create the initial arrangement on the screen
@@ -445,7 +460,6 @@ class WayfireSwitcher : public wayfire_plugin_t
         background_dim_duration.start(1, background_dim_factor);
 
         auto ws_views = get_workspace_views();
-        log_info("restart with %lu", ws_views.size());
         for (auto v : ws_views)
             views.push_back(create_switcher_view(v));
 
@@ -473,7 +487,6 @@ class WayfireSwitcher : public wayfire_plugin_t
         if (count_different_active_views() == 2)
             fading_view = get_unfocused_view();
 
-
         for (auto& sv : views)
         {
             sv.attribs.off_x = {duration.progress(sv.attribs.off_x), 0};
@@ -484,7 +497,8 @@ class WayfireSwitcher : public wayfire_plugin_t
             sv.attribs.scale_y = {duration.progress(sv.attribs.scale_y), 1.0};
 
             sv.attribs.rotation = {duration.progress(sv.attribs.rotation), 0};
-            sv.attribs.alpha    = {duration.progress(sv.attribs.alpha), 1.0};
+            sv.attribs.alpha    = {duration.progress(sv.attribs.alpha),
+                get_view_normal_alpha(sv.view)};
 
             if (sv.view == fading_view)
             {
@@ -497,6 +511,10 @@ class WayfireSwitcher : public wayfire_plugin_t
         background_dim_duration.start(background_dim_duration.progress(), 1);
         duration.start();
         active = false;
+
+        /* Potentially restore view[0] if it was maximized */
+        if (views.size())
+            output->focus_view(views[0].view);
     }
 
     std::vector<wayfire_view> get_background_views() const
@@ -702,7 +720,8 @@ class WayfireSwitcher : public wayfire_plugin_t
         }
 
         rebuild_view_list();
-        output->focus_view(views.front().view);
+        if (!views.front().view->minimized)
+            output->focus_view(views.front().view);
         duration.start();
     }
 
