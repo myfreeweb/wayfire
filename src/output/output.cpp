@@ -571,6 +571,9 @@ void wayfire_output::focus_view(wayfire_view v, wlr_seat *seat)
         if (v->get_keyboard_focus_surface() ||
             interactive_view_from_view(v.get()))
         {
+            if (v->minimized)
+                v->minimize_request(false);
+
             set_active_view(v, seat);
             bring_to_front(v);
 
