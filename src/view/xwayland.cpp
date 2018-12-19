@@ -346,6 +346,28 @@ class wayfire_xwayland_view : public wayfire_view_t
     std::string get_title() { return nonull(xw->title); }
     std::string get_app_id() {return nonull(xw->class_t); }
 
+    virtual void toplevel_send_app_id()
+    {
+        if (!toplevel_handle)
+            return;
+
+        std::string app_id;
+
+        auto default_app_id = get_app_id();
+        auto instance_app_id = nonull(xw->instance);
+
+        auto app_id_mode = (*core->config)["workarounds"]
+            ->get_option("app_id_mode", "stock");
+
+        if (app_id_mode->as_string() == "full") {
+            app_id = default_app_id + " " + instance_app_id;
+        } else {
+            app_id = default_app_id;
+        }
+
+        wlr_foreign_toplevel_handle_v1_set_app_id(toplevel_handle, app_id.c_str());
+    }
+
     void set_fullscreen(bool full)
     {
         wayfire_view_t::set_fullscreen(full);

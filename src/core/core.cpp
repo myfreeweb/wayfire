@@ -28,6 +28,7 @@ extern "C"
 #include "seat/input-inhibit.hpp"
 #include "seat/touch.hpp"
 #include "../output/wayfire-shell.hpp"
+#include "../output/gtk-shell.hpp"
 #include "view/priv-view.hpp"
 #include "config.h"
 
@@ -166,6 +167,7 @@ void wayfire_core::init(wayfire_config *conf)
     protocols.idle_inhibit = wlr_idle_inhibit_v1_create(display);
 
     protocols.wf_shell = wayfire_shell_create(display);
+    protocols.gtk_shell = wf_gtk_shell_create(display);
     protocols.toplevel_manager = wlr_foreign_toplevel_manager_v1_create(display);
 
 #ifdef BUILD_WITH_IMAGEIO

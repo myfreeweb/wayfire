@@ -10,6 +10,7 @@
 #include "priv-view.hpp"
 #include "xdg-shell.hpp"
 #include "xdg-shell-v6.hpp"
+#include "../output/gtk-shell.hpp"
 
 #include <algorithm>
 #include <glm/glm.hpp>
@@ -122,8 +123,25 @@ void wayfire_view_t::toplevel_send_app_id()
 {
     if (!toplevel_handle)
         return;
-    wlr_foreign_toplevel_handle_v1_set_app_id(toplevel_handle,
-        get_app_id().c_str());
+
+    std::string app_id;
+
+    auto default_app_id = get_app_id();
+    auto gtk_shell_app_id = wf_gtk_shell_get_custom_app_id(
+        core->protocols.gtk_shell, surface->resource);
+
+    auto app_id_mode = (*core->config)["workarounds"]
+        ->get_option("app_id_mode", "stock");
+
+    if (app_id_mode->as_string() == "gtk-shell" && gtk_shell_app_id.length() > 0) {
+        app_id = gtk_shell_app_id;
+    } else if (app_id_mode->as_string() == "full") {
+        app_id = default_app_id + " " + gtk_shell_app_id;
+    } else {
+        app_id = default_app_id;
+    }
+
+    wlr_foreign_toplevel_handle_v1_set_app_id(toplevel_handle, app_id.c_str());
 }
 
 void wayfire_view_t::toplevel_send_state()

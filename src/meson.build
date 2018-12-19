@@ -26,7 +26,8 @@ wayfire_sources = ['main.cpp',
                    'output/plugin-loader.cpp',
                    'output/output.cpp',
                    'output/render-manager.cpp',
-                   'output/wayfire-shell.cpp']
+                   'output/wayfire-shell.cpp',
+                   'output/gtk-shell.cpp']
 
 wayfire_dependencies = [wayland_server, wlroots, xkbcommon, libinput,
                        pixman, drm, egl, libevdev, glesv2, glm, wf_protos,

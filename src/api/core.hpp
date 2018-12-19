@@ -28,6 +28,7 @@ struct wlr_export_dmabuf_manager_v1;
 struct wlr_server_decoration_manager;
 struct wlr_input_inhibit_manager;
 struct wayfire_shell;
+struct wf_gtk_shell;
 struct wlr_virtual_keyboard_manager_v1;
 struct wlr_idle;
 struct wlr_idle_inhibit_manager_v1;
@@ -100,6 +101,7 @@ class wayfire_core : public wf_object_base
             wlr_idle_inhibit_manager_v1 *idle_inhibit;
             wlr_foreign_toplevel_manager_v1 *toplevel_manager;
             wayfire_shell *wf_shell;
+            wf_gtk_shell *gtk_shell;
         } protocols;
 
         std::string wayland_display, xwayland_display;
