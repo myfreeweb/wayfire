@@ -32,7 +32,7 @@ class wayfire_xdg6_view : public wayfire_view_t
     protected:
         wl_listener destroy_ev, map_ev, unmap_ev, new_popup,
                 request_move, request_resize,
-                request_maximize, request_fullscreen,
+                request_maximize, request_minimize, request_fullscreen,
                 set_title, set_app_id;
 
         wf_point xdg_surface_offset = {0, 0};

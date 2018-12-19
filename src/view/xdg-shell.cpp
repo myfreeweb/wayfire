@@ -141,6 +141,13 @@ static void handle_xdg_request_maximized(wl_listener*, void *data)
     view->maximize_request(surf->toplevel->client_pending.maximized);
 }
 
+static void handle_xdg_request_minimized(wl_listener*, void *data)
+{
+    auto surf = static_cast<wlr_xdg_surface*> (data);
+    auto view = wf_view_from_void(surf->data);
+    view->minimize_request(true);
+}
+
 static void handle_xdg_request_fullscreen(wl_listener*, void *data)
 {
     auto ev = static_cast<wlr_xdg_toplevel_set_fullscreen_event*> (data);
@@ -191,6 +198,7 @@ wayfire_xdg_view::wayfire_xdg_view(wlr_xdg_surface *s)
     request_move.notify       = handle_xdg_request_move;
     request_resize.notify     = handle_xdg_request_resize;
     request_maximize.notify   = handle_xdg_request_maximized;
+    request_minimize.notify   = handle_xdg_request_minimized;
     request_fullscreen.notify = handle_xdg_request_fullscreen;
 
     wlr_xdg_surface_ping(s);
@@ -205,6 +213,7 @@ wayfire_xdg_view::wayfire_xdg_view(wlr_xdg_surface *s)
     wl_signal_add(&xdg_surface->toplevel->events.request_move,       &request_move);
     wl_signal_add(&xdg_surface->toplevel->events.request_resize,     &request_resize);
     wl_signal_add(&xdg_surface->toplevel->events.request_maximize,   &request_maximize);
+    wl_signal_add(&xdg_surface->toplevel->events.request_minimize,   &request_minimize);
     wl_signal_add(&xdg_surface->toplevel->events.request_fullscreen, &request_fullscreen);
 
     xdg_surface->data = this;
@@ -342,6 +351,7 @@ void wayfire_xdg_view::destroy()
     wl_list_remove(&request_move.link);
     wl_list_remove(&request_resize.link);
     wl_list_remove(&request_maximize.link);
+    wl_list_remove(&request_minimize.link);
     wl_list_remove(&request_fullscreen.link);
     wl_list_remove(&set_parent_ev.link);
     wl_list_remove(&set_title.link);
