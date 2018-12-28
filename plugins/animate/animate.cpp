@@ -67,7 +67,7 @@ struct animation_hook
         output->render->add_effect(&update_animation_hook, WF_OUTPUT_EFFECT_PRE);
 
         output->connect_signal("detach-view", &view_removed);
-        if (type != ANIMATION_TYPE_UNMAP)
+        if (type != ANIMATION_TYPE_UNMAP) // TODO: perhaps wrong, if view is closed while minimizing
             output->connect_signal("view-disappeared", &view_removed);
     }
 
@@ -117,6 +117,7 @@ class wayfire_animation : public wayfire_plugin_t
         output->connect_signal("map-view", &on_view_mapped);
         output->connect_signal("unmap-view", &on_view_unmapped);
         output->connect_signal("start-rendering", &on_render_start);
+        output->connect_signal("view-minimize-request", &on_minimize_request);
     }
 
     /* TODO: enhance - add more animations */
@@ -152,6 +153,17 @@ class wayfire_animation : public wayfire_plugin_t
             new animation_hook<FireAnimation> (view, duration, ANIMATION_TYPE_UNMAP);
     };
 
+    signal_callback_t on_minimize_request = [=] (signal_data *data) -> void
+    {
+        auto ev = static_cast<view_minimize_request_signal*> (data);
+        if (ev->state) {
+            ev->carried_out = true;
+            new animation_hook<zoom_animation> (ev->view, duration, ANIMATION_TYPE_MINIMIZE);
+        } else {
+            new animation_hook<zoom_animation> (ev->view, duration, ANIMATION_TYPE_RESTORE);
+        }
+    };
+
     signal_callback_t on_render_start = [=] (signal_data *data) -> void
     {
         new wf_system_fade(output, startup_duration);
@@ -162,6 +174,7 @@ class wayfire_animation : public wayfire_plugin_t
         output->disconnect_signal("map-view", &on_view_mapped);
         output->disconnect_signal("unmap-view", &on_view_unmapped);
         output->disconnect_signal("start-rendering", &on_render_start);
+        output->disconnect_signal("view-minimize-request", &on_minimize_request);
     }
 };
 

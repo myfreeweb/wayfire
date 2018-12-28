@@ -22,7 +22,7 @@ class fade_animation : public animation_base
         duration = wf_duration(dur);
         duration.start();
 
-        if (type == ANIMATION_TYPE_UNMAP)
+        if (type & HIDING_ANIMATION)
             std::swap(start, end);
 
         name = "animation-fade-" + std::to_string(type);
@@ -60,7 +60,7 @@ class zoom_animation : public animation_base
         duration = wf_duration(dur);
         duration.start();
 
-        if (type == ANIMATION_TYPE_UNMAP)
+        if (type & HIDING_ANIMATION)
         {
             std::swap(alpha_start, alpha_end);
             std::swap(zoom_start, zoom_end);

@@ -137,7 +137,7 @@ void FireAnimation::init(wayfire_view view, wf_option dur, wf_animation_type typ
     this->duration = wf_duration(new_static_option(std::to_string(msec)),
                                  wf_animation::linear);
 
-    if (type == ANIMATION_TYPE_UNMAP) {
+    if (type & HIDING_ANIMATION) {
         duration.start(1, 0);
     } else {
         duration.start(0, 1);
@@ -162,6 +162,5 @@ bool FireAnimation::step()
 
 FireAnimation::~FireAnimation()
 {
-    log_info("pop");
     view->pop_transformer(name);
 }
