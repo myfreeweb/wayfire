@@ -16,23 +16,21 @@ class fade_animation : public animation_base
 
     public:
 
-    void init(wayfire_view view, wf_option dur, bool close)
+    void init(wayfire_view view, wf_option dur, wf_animation_type type)
     {
         this->view = view;
         duration = wf_duration(dur);
         duration.start();
 
-        if (close)
+        if (type == ANIMATION_TYPE_UNMAP)
             std::swap(start, end);
 
-        name = "animation-fade-" + std::to_string(close);
+        name = "animation-fade-" + std::to_string(type);
         view->add_transformer(nonstd::make_unique<wf_2D_view> (view), name);
     }
 
     bool step()
     {
-        log_info("duration has progress %f", duration.progress_percentage());
-
         auto transform = dynamic_cast<wf_2D_view*> (view->get_transformer(name).get());
         transform->alpha = duration.progress(start, end);
         return duration.running();
@@ -56,13 +54,13 @@ class zoom_animation : public animation_base
 
     public:
 
-    void init(wayfire_view view, wf_option dur, bool close)
+    void init(wayfire_view view, wf_option dur, wf_animation_type type)
     {
         this->view = view;
         duration = wf_duration(dur);
         duration.start();
 
-        if (close)
+        if (type == ANIMATION_TYPE_UNMAP)
         {
             std::swap(alpha_start, alpha_end);
             std::swap(zoom_start, zoom_end);

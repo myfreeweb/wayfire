@@ -127,7 +127,7 @@ static float fire_duration_mod_for_height(int height)
     return std::min(height / 400.0, 3.0);
 }
 
-void FireAnimation::init(wayfire_view view, wf_option dur, bool close)
+void FireAnimation::init(wayfire_view view, wf_option dur, wf_animation_type type)
 {
 
     this->view = view;
@@ -137,13 +137,13 @@ void FireAnimation::init(wayfire_view view, wf_option dur, bool close)
     this->duration = wf_duration(new_static_option(std::to_string(msec)),
                                  wf_animation::linear);
 
-    if (close) {
+    if (type == ANIMATION_TYPE_UNMAP) {
         duration.start(1, 0);
     } else {
         duration.start(0, 1);
     }
 
-    name = "animation-fire-" + std::to_string(close);
+    name = "animation-fire-" + std::to_string(type);
     auto tr = nonstd::make_unique<FireTransformer>(view);
     transformer = decltype(transformer) (tr.get());
 

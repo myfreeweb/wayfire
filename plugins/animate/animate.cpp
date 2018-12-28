@@ -8,26 +8,27 @@
 #include "basic_animations.hpp"
 #include "fire/fire.hpp"
 
-void animation_base::init(wayfire_view, wf_option, bool) {}
+void animation_base::init(wayfire_view, wf_option, wf_animation_type) {}
 bool animation_base::step() {return false;}
 animation_base::~animation_base() {}
 
-template<class animation_type, bool close_animation>
+template<class animation_type>
 struct animation_hook;
 
-template<class animation_type, bool close_animation>
+template<class animation_type>
 void delete_hook_idle(void *data)
 {
-    auto hook = (animation_hook<animation_type, close_animation>*) data;
+    auto hook = (animation_hook<animation_type>*) data;
     delete hook;
 }
 
-template<class animation_type, bool close_animation>
+template<class animation_type>
 struct animation_hook
 {
     static_assert(std::is_base_of<animation_base, animation_type>::value,
             "animation_type must be derived from animation_base!");
 
+    wf_animation_type type;
     animation_base *base = nullptr;
     wayfire_view view;
     wayfire_output *output;
@@ -35,23 +36,20 @@ struct animation_hook
     effect_hook_t hook;
     signal_callback_t view_removed;
 
-    animation_hook(wayfire_view view, wf_option duration)
+    animation_hook(wayfire_view view, wf_option duration, wf_animation_type type)
     {
+        this->type = type;
         this->view = view;
         output = view->get_output();
 
-        if (close_animation)
+        if (type == ANIMATION_TYPE_UNMAP)
         {
             view->inc_keep_count();
             view->take_snapshot();
         }
 
-        view->damage();
         base = dynamic_cast<animation_base*> (new animation_type());
-        base->init(view, duration, close_animation);
-        base->step();
-        view->damage();
-
+        base->init(view, duration, type);
         hook = [=] ()
         {
             view->damage();
@@ -62,23 +60,23 @@ struct animation_hook
                 finalize();
         };
 
-        output->render->add_effect(&hook, WF_OUTPUT_EFFECT_POST);
+        output->render->add_effect(&hook, WF_OUTPUT_EFFECT_PRE);
 
         view_removed = [=] (signal_data *data)
         {
-            if (get_signaled_view(data) == view && !close_animation)
+            if (get_signaled_view(data) == view && type != ANIMATION_TYPE_UNMAP)
                 finalize();
         };
 
         output->connect_signal("detach-view", &view_removed);
 
-        if (!close_animation)
+        if (type != ANIMATION_TYPE_UNMAP)
             output->connect_signal("view-disappeared", &view_removed);
     }
 
     void finalize()
     {
-        output->render->rem_effect(&hook, WF_OUTPUT_EFFECT_POST);
+        output->render->rem_effect(&hook, WF_OUTPUT_EFFECT_PRE);
 
         output->disconnect_signal("detach-view", &view_removed);
         output->disconnect_signal("view-disappeared", &view_removed);
@@ -87,10 +85,10 @@ struct animation_hook
         view->alpha = 1.0;
         delete base;
 
-        if (close_animation)
+        if (type == ANIMATION_TYPE_UNMAP)
             view->dec_keep_count();
 
-        wl_event_loop_add_idle(core->ev_loop, delete_hook_idle<animation_type, close_animation>, this);
+        wl_event_loop_add_idle(core->ev_loop, delete_hook_idle<animation_type>, this);
     }
 
     ~animation_hook()
@@ -152,11 +150,11 @@ class wayfire_animation : public wayfire_plugin_t {
             return;
 
         if (open_animation->as_string() == "fade")
-            new animation_hook<fade_animation, false>(view, duration);
+            new animation_hook<fade_animation>(view, duration, ANIMATION_TYPE_MAP);
         else if (open_animation->as_string() == "zoom")
-            new animation_hook<zoom_animation, false>(view, duration);
+            new animation_hook<zoom_animation>(view, duration, ANIMATION_TYPE_MAP);
         else if (open_animation->as_string() == "fire")
-            new animation_hook<FireAnimation, false>(view, duration);
+            new animation_hook<FireAnimation>(view, duration, ANIMATION_TYPE_MAP);
     }
 
     void view_unmapped(signal_data *data)
@@ -167,11 +165,11 @@ class wayfire_animation : public wayfire_plugin_t {
             return;
 
         if (close_animation->as_string() == "fade")
-            new animation_hook<fade_animation, true> (view, duration);
+            new animation_hook<fade_animation> (view, duration, ANIMATION_TYPE_UNMAP);
         else if (close_animation->as_string() == "zoom")
-            new animation_hook<zoom_animation, true> (view, duration);
+            new animation_hook<zoom_animation> (view, duration, ANIMATION_TYPE_UNMAP);
         else if (close_animation->as_string() == "fire")
-            new animation_hook<FireAnimation, true> (view, duration);
+            new animation_hook<FireAnimation> (view, duration, ANIMATION_TYPE_UNMAP);
     }
 
     void fini()
