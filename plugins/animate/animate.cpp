@@ -33,8 +33,21 @@ struct animation_hook
     wayfire_view view;
     wayfire_output *output;
 
-    effect_hook_t hook;
-    signal_callback_t view_removed;
+    effect_hook_t update_animation_hook = [=] ()
+    {
+        view->damage();
+        bool result = base->step();
+        view->damage();
+
+        if (!result)
+            finalize();
+    };
+
+    signal_callback_t view_removed = [=] (signal_data *data)
+    {
+        if (get_signaled_view(data) == view && type != ANIMATION_TYPE_UNMAP)
+            finalize();
+    };
 
     animation_hook(wayfire_view view, wf_option duration, wf_animation_type type)
     {
@@ -50,43 +63,27 @@ struct animation_hook
 
         base = dynamic_cast<animation_base*> (new animation_type());
         base->init(view, duration, type);
-        hook = [=] ()
-        {
-            view->damage();
-            bool result = base->step();
-            view->damage();
 
-            if (!result)
-                finalize();
-        };
-
-        output->render->add_effect(&hook, WF_OUTPUT_EFFECT_PRE);
-
-        view_removed = [=] (signal_data *data)
-        {
-            if (get_signaled_view(data) == view && type != ANIMATION_TYPE_UNMAP)
-                finalize();
-        };
+        output->render->add_effect(&update_animation_hook, WF_OUTPUT_EFFECT_PRE);
 
         output->connect_signal("detach-view", &view_removed);
-
         if (type != ANIMATION_TYPE_UNMAP)
             output->connect_signal("view-disappeared", &view_removed);
     }
 
     void finalize()
     {
-        output->render->rem_effect(&hook, WF_OUTPUT_EFFECT_PRE);
+        output->render->rem_effect(&update_animation_hook, WF_OUTPUT_EFFECT_PRE);
 
         output->disconnect_signal("detach-view", &view_removed);
         output->disconnect_signal("view-disappeared", &view_removed);
 
-        /* make sure we "unhide" the view */
-        view->alpha = 1.0;
         delete base;
-
         if (type == ANIMATION_TYPE_UNMAP)
             view->dec_keep_count();
+
+        if (type == ANIMATION_TYPE_MINIMIZE)
+            view->set_minimized(true);
 
         wl_event_loop_add_idle(core->ev_loop, delete_hook_idle<animation_type>, this);
     }
@@ -131,11 +128,6 @@ class wayfire_animation : public wayfire_plugin_t {
 
         output->connect_signal("map-view", &map_cb);
         output->connect_signal("unmap-view", &unmap_cb);
-
-        /* TODO: the best way to do this?
-        if (config->get_section("backlight")->get_int("min_brightness", 1) > -1)
-            output->connect_signal("wake", &wake_cb);
-            */
         output->connect_signal("start-rendering", &wake_cb);
     }
 
