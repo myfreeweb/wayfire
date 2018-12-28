@@ -157,7 +157,6 @@ enum wf_view_role
 /* Represents a desktop window (not as X11 window, but like a xdg_toplevel surface) */
 class wayfire_view_t : public wayfire_surface_t, public wf_object_base
 {
-    friend void surface_destroyed_cb(wl_listener*, void *data);
     protected:
 
         /* Whether this view is really mapped
@@ -227,7 +226,10 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
 
         wl_listener toplevel_handle_v1_maximize_request,
                     toplevel_handle_v1_activate_request,
-                    toplevel_handle_v1_minimize_request;
+                    toplevel_handle_v1_minimize_request,
+                    toplevel_handle_v1_set_rectangle_request;
+
+        wlr_box minimize_hint;
 
         /* Create/destroy the toplevel_handle */
         virtual void create_toplevel();
@@ -244,6 +246,7 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
          * and if there is a toplevel_handle, they send the updated values */
         virtual void handle_app_id_changed();
         virtual void handle_title_changed();
+        virtual void handle_minimize_hint(const wlr_box& hint);
 
     public:
         /* these represent toplevel relations, children here are transient windows,
@@ -354,6 +357,10 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         virtual void minimize_request(bool state);
         virtual void maximize_request(bool state);
         virtual void fullscreen_request(wayfire_output *output, bool state);
+
+        /* Returns the rectangle on the output to which to minimize towards.
+         * Returns a box with width = height = 0 if no hint is set */
+        virtual wlr_box get_minimize_hint();
 
         /* returns whether the view should be decorated */
         virtual bool should_be_decorated();

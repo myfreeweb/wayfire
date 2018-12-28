@@ -66,6 +66,33 @@ static void handle_toplevel_handle_v1_activate_request(wl_listener*, void *data)
     view->get_output()->focus_view(view->self());
 }
 
+static void handle_toplevel_handle_v1_set_rectangle_request(wl_listener*, void *data)
+{
+    auto ev = static_cast<wlr_foreign_toplevel_handle_v1_set_rectangle_event*> (data);
+    auto view = wf_view_from_void(ev->toplevel->data);
+
+    auto surface = wf_surface_from_void(ev->surface->data);
+    if (!surface)
+    {
+        log_error("Setting minimize hint to unknown surface.");
+        return;
+    }
+
+    if (surface->get_output() != view->get_output())
+    {
+        log_info("Minimize hint set to surface on a different output, "
+            "problems might arise");
+    }
+
+    auto box = surface->get_output_geometry();
+    box.x += ev->x;
+    box.y += ev->y;
+    box.width = ev->width;
+    box.height = ev->height;
+
+    view->handle_minimize_hint(box);
+}
+
 void wayfire_view_t::create_toplevel()
 {
     if (toplevel_handle)
@@ -85,12 +112,16 @@ void wayfire_view_t::create_toplevel()
         handle_toplevel_handle_v1_minimize_request;
     toplevel_handle_v1_activate_request.notify =
         handle_toplevel_handle_v1_activate_request;
+    toplevel_handle_v1_set_rectangle_request.notify =
+        handle_toplevel_handle_v1_set_rectangle_request;
     wl_signal_add(&toplevel_handle->events.request_maximize,
         &toplevel_handle_v1_maximize_request);
     wl_signal_add(&toplevel_handle->events.request_minimize,
         &toplevel_handle_v1_minimize_request);
     wl_signal_add(&toplevel_handle->events.request_activate,
         &toplevel_handle_v1_activate_request);
+    wl_signal_add(&toplevel_handle->events.set_rectangle,
+        &toplevel_handle_v1_set_rectangle_request);
 
     toplevel_send_title();
     toplevel_send_app_id();
@@ -106,6 +137,8 @@ void wayfire_view_t::destroy_toplevel()
     toplevel_handle->data = NULL;
     wl_list_remove(&toplevel_handle_v1_maximize_request.link);
     wl_list_remove(&toplevel_handle_v1_activate_request.link);
+    wl_list_remove(&toplevel_handle_v1_minimize_request.link);
+    wl_list_remove(&toplevel_handle_v1_set_rectangle_request.link);
 
     wlr_foreign_toplevel_handle_v1_destroy(toplevel_handle);
     toplevel_handle = NULL;
@@ -188,6 +221,16 @@ void wayfire_view_t::handle_app_id_changed()
     emit_signal("app-id-changed", &data);
 
     toplevel_send_app_id();
+}
+
+void wayfire_view_t::handle_minimize_hint(const wlr_box &hint)
+{
+    this->minimize_hint = hint;
+}
+
+wlr_box wayfire_view_t::get_minimize_hint()
+{
+    return minimize_hint;
 }
 
 void wayfire_view_t::set_output(wayfire_output *wo)
@@ -1028,7 +1071,7 @@ void wayfire_view_t::maximize_request(bool state)
 
 void wayfire_view_t::minimize_request(bool state)
 {
-    if (state == minimized)
+    if (state == minimized || !is_mapped())
         return;
 
     view_minimize_request_signal data;
@@ -1038,9 +1081,18 @@ void wayfire_view_t::minimize_request(bool state)
     if (is_mapped())
     {
         output->emit_signal("view-minimize-request", &data);
-        /* No plugin took care of the request, do some default action */
-        if (!data.carried_out)
+        /* Some plugin (e.g animate) will take care of the request, so we need
+         * to just send proper state to foreign-toplevel clients */
+        if (data.carried_out)
+        {
+            minimized = state;
+            toplevel_send_state();
+
+        } else
+        {
+            /* Do the default minimization */
             set_minimized(state);
+        }
     }
 }
 

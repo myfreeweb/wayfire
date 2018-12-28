@@ -45,7 +45,7 @@ struct animation_hook
 
     signal_callback_t view_removed = [=] (signal_data *data)
     {
-        if (get_signaled_view(data) == view && type != ANIMATION_TYPE_UNMAP)
+        if (get_signaled_view(data) == view)
             finalize(true);
     };
 
@@ -67,8 +67,11 @@ struct animation_hook
         output->render->add_effect(&update_animation_hook, WF_OUTPUT_EFFECT_PRE);
 
         output->connect_signal("detach-view", &view_removed);
-        if (type != ANIMATION_TYPE_UNMAP) // TODO: perhaps wrong, if view is closed while minimizing
+        /* We don't want to listen for view-disappeared signal,
+         * because it will be emitted right after the unmap signal */
+        if (type != ANIMATION_TYPE_UNMAP)
             output->connect_signal("view-disappeared", &view_removed);
+        output->connect_signal("view-minimize-request", &view_removed);
     }
 
     void finalize(bool forced)
@@ -77,6 +80,7 @@ struct animation_hook
 
         output->disconnect_signal("detach-view", &view_removed);
         output->disconnect_signal("view-disappeared", &view_removed);
+        output->disconnect_signal("view-minimize-request", &view_removed);
 
         delete base;
         if (type == ANIMATION_TYPE_UNMAP)

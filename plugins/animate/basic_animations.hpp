@@ -48,8 +48,8 @@ class zoom_animation : public animation_base
     wayfire_view view;
     wf_2D_view *our_transform = nullptr;
 
-    float alpha_start = 0, alpha_end = 1;
-    float zoom_start = 1./3, zoom_end = 1;
+    wf_transition alpha {0, 1}, zoom {1./3, 1},
+                  offset_x{0, 0}, offset_y{0, 0};
     wf_duration duration;
 
     public:
@@ -60,10 +60,36 @@ class zoom_animation : public animation_base
         duration = wf_duration(dur);
         duration.start();
 
+        if (type & MINIMIZE_STATE_ANIMATION)
+        {
+            auto hint = view->get_minimize_hint();
+            if (hint.width > 0 && hint.height > 0)
+            {
+                int hint_cx = hint.x + hint.width / 2;
+                int hint_cy = hint.y + hint.height / 2;
+
+                auto bbox = view->get_wm_geometry();
+                int view_cx = bbox.x + bbox.width / 2;
+                int view_cy = bbox.y + bbox.height / 2;
+
+                offset_x = {1.0 * hint_cx - view_cx, 0};
+                offset_y = {1.0 * hint_cy - view_cy, 0};
+
+                if (bbox.width > 0 && bbox.height > 0)
+                {
+                    double scale_x = 1.0 * hint.width / bbox.width;
+                    double scale_y = 1.0 * hint.height / bbox.height;
+                    zoom = {std::min(scale_x, scale_y), 1};
+                }
+            }
+        }
+
         if (type & HIDING_ANIMATION)
         {
-            std::swap(alpha_start, alpha_end);
-            std::swap(zoom_start, zoom_end);
+            std::swap(alpha.start, alpha.end);
+            std::swap(zoom.start, zoom.end);
+            std::swap(offset_x.start, offset_x.end);
+            std::swap(offset_y.start, offset_y.end);
         }
 
         our_transform = new wf_2D_view(view);
@@ -72,10 +98,14 @@ class zoom_animation : public animation_base
 
     bool step()
     {
-        float c = duration.progress(zoom_start, zoom_end);
-        our_transform->alpha = duration.progress(alpha_start, alpha_end);
+        float c = duration.progress(zoom);
+
+        our_transform->alpha = duration.progress(alpha);
         our_transform->scale_x = c;
         our_transform->scale_y = c;
+
+        our_transform->translation_x = duration.progress(offset_x);
+        our_transform->translation_y = duration.progress(offset_y);
 
         return duration.running();
     }
