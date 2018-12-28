@@ -144,8 +144,8 @@ void wf_2D_view::render_box(uint32_t src_tex, wlr_box src_box,
 
     auto rotate = glm::rotate(glm::mat4(1.0), angle, {0, 0, 1});
     auto translate = glm::translate(glm::mat4(1.0),
-                                    {quad.off_x,
-                                     quad.off_y, 0});
+                                    {quad.off_x + translation_x,
+                                     quad.off_y - translation_y, 0});
 
     auto ortho = glm::ortho(-fb.geometry.width  / 2.0f, fb.geometry.width  / 2.0f,
                             -fb.geometry.height / 2.0f, fb.geometry.height / 2.0f);
