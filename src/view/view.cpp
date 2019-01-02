@@ -63,7 +63,7 @@ static void handle_toplevel_handle_v1_activate_request(wl_listener*, void *data)
     auto ev = static_cast<wlr_foreign_toplevel_handle_v1_activated_event*> (data);
     auto view = wf_view_from_void(ev->toplevel->data);
 
-    view->get_output()->focus_view(view->self());
+    view->focus_request();
 }
 
 static void handle_toplevel_handle_v1_set_rectangle_request(wl_listener*, void *data)
@@ -1039,6 +1039,12 @@ void wayfire_view_t::move_request()
     move_request_signal data;
     data.view = self();
     output->emit_signal("move-request", &data);
+}
+
+void wayfire_view_t::focus_request()
+{
+    core->focus_view(self(), nullptr);
+    output->ensure_visible(self());
 }
 
 void wayfire_view_t::resize_request(uint32_t edges)

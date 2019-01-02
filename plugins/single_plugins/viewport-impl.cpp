@@ -353,11 +353,8 @@ void viewport_manager::set_workspace(std::tuple<int, int> nPos)
     output->render->schedule_redraw();
 
     change_viewport_signal data;
-    data.old_vx = vx;
-    data.old_vy = vy;
-
-    data.new_vx = nx;
-    data.new_vy = ny;
+    data.old_viewport = std::make_tuple(vx, vy);
+    data.new_viewport = std::make_tuple(nx, ny);
 
     vx = nx;
     vy = ny;
@@ -452,14 +449,6 @@ void viewport_manager::remove_reserved_area(anchored_area *area)
     reflow_reserved_areas();
 }
 
-static int divide_round_down(int a, int b)
-{
-    if (a >= 0)
-        return a / b;
-    else
-        return (a - b + 1) / b;
-}
-
 void viewport_manager::reflow_reserved_areas()
 {
     auto old_workarea = current_workarea;
@@ -507,8 +496,8 @@ void viewport_manager::reflow_reserved_areas()
              * update_output_geometry() would have already scaled coordinates,
              * so that views' corners are in the proper viewports now */
             auto wm = view->get_wm_geometry();
-            int vx = divide_round_down(wm.x, output_geometry.width);
-            int vy = divide_round_down(wm.y, output_geometry.height);
+            int vx = std::floor(1.0 * wm.x / output_geometry.width);
+            int vy = std::floor(1.0 * wm.y / output_geometry.height);
 
             auto new_geometry = current_workarea;
             new_geometry.x += vx * output_geometry.width;

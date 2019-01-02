@@ -353,6 +353,7 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
         bool is_hidden = false;
 
         virtual void move_request();
+        virtual void focus_request();
         virtual void resize_request(uint32_t edges = 0);
         virtual void minimize_request(bool state);
         virtual void maximize_request(bool state);

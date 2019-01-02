@@ -557,6 +557,39 @@ void wayfire_output::set_active_view(wayfire_view v, wlr_seat *seat)
         last_active_toplevel = active_view;
 }
 
+bool wayfire_output::ensure_visible(wayfire_view v)
+{
+    auto bbox = v->get_bounding_box();
+    auto g = this->get_relative_geometry();
+
+    /* Compute the percentage of the view which is visible */
+    auto intersection = wf_geometry_intersection(bbox, g);
+    double area = 1.0 * intersection.width * intersection.height;
+    area /= 1.0 * bbox.width * bbox.height;
+
+    if (area >= 0.1) /* View is somewhat visible, no need for anything special */
+        return false;
+
+    /* Otherwise, switch the workspace so the view gets maximum exposure */
+    int dx = bbox.x + bbox.width / 2;
+    int dy = bbox.y + bbox.height / 2;
+
+    int dvx = std::floor(1.0 * dx / g.width);
+    int dvy = std::floor(1.0 * dy / g.height);
+    GetTuple(vx, vy, workspace->get_current_workspace());
+
+    change_viewport_signal data;
+
+    data.carried_out = false;
+    data.old_viewport = std::make_tuple(vx, vy);
+    data.new_viewport = std::make_tuple(vx + dvx, vy + dvy);
+
+    emit_signal("set-workspace-request", &data);
+    if (!data.carried_out)
+        workspace->set_workspace(data.new_viewport);
+
+    return true;
+}
 
 void wayfire_output::focus_view(wayfire_view v, wlr_seat *seat)
 {
@@ -566,27 +599,31 @@ void wayfire_output::focus_view(wayfire_view v, wlr_seat *seat)
         return;
     }
 
-    if (v && v->is_mapped())
+    if (!v || !v->is_mapped())
     {
-        if (v->get_keyboard_focus_surface() ||
-            interactive_view_from_view(v.get()))
-        {
-            if (v->minimized)
-                v->minimize_request(false);
-
-            set_active_view(v, seat);
-            bring_to_front(v);
-
-            focus_view_signal data;
-            data.view = v;
-            emit_signal("focus-view", &data);
-        }
-    }
-    else
-    {
+        /* We can't really focus the view, it isn't mapped or is NULL.
+         * But at least we can bring it to front */
         set_active_view(nullptr, seat);
         if (v)
             bring_to_front(v);
+
+        return;
+    }
+
+    /* If no keyboard focus surface is set, then we don't want to focus the view */
+    if (v->get_keyboard_focus_surface() || interactive_view_from_view(v.get()))
+    {
+        /* We must make sure the view which gets focus is visible on the
+         * current workspace */
+        if (v->minimized)
+            v->minimize_request(false);
+
+        set_active_view(v, seat);
+        bring_to_front(v);
+
+        focus_view_signal data;
+        data.view = v;
+        emit_signal("focus-view", &data);
     }
 }
 

@@ -65,11 +65,10 @@ struct view_minimize_request_signal : public _view_state_signal
 /* same as both change_viewport_request and change_viewport_notify */
 struct change_viewport_signal : public signal_data
 {
-    int old_vx, old_vy;
-    int new_vx, new_vy;
+    bool carried_out;
+    std::tuple<int, int> old_viewport, new_viewport;
 };
 using change_viewport_notify = change_viewport_signal;
-
 
 /* sent when the workspace implementation actually reserves the workarea */
 struct reserved_workarea_signal : public signal_data
@@ -83,7 +82,6 @@ struct _surface_map_state_changed_signal : public signal_data
 {
     wayfire_surface_t *surface;
 };
-
 
 /* Part 2: Signals from wayfire_core */
 struct _output_signal : public signal_data
