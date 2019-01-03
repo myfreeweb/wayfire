@@ -321,6 +321,15 @@ void wayfire_view_t::move(int x, int y, bool send_signal)
     damage(last_bounding_box);
     geometry.x = x + opos.x - wm.x;
     geometry.y = y + opos.y - wm.y;
+
+    /* Make sure that if we move the view while it is unmapped, its snapshot
+     * is still valid coordinates */
+    if (offscreen_buffer.valid())
+    {
+        offscreen_buffer.geometry.x += x - data.old_geometry.x;
+        offscreen_buffer.geometry.y += y - data.old_geometry.y;
+    }
+
     damage();
 
     if (send_signal)
