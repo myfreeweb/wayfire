@@ -95,6 +95,13 @@ class vswitch : public wayfire_plugin_t
 
         animation_duration = section->get_option("duration", "180");
         duration = wf_duration(animation_duration);
+
+        output->connect_signal("set-workspace-request", &on_set_workspace_request);
+    }
+
+    inline bool is_active()
+    {
+        return output->is_plugin_active(grab_interface->name);
     }
 
     void add_direction(int x, int y, wayfire_view view = nullptr)
@@ -102,7 +109,7 @@ class vswitch : public wayfire_plugin_t
         if (!x && !y)
             return;
 
-        if (!output->is_plugin_active(grab_interface->name))
+        if (!is_active())
             start_switch();
 
         if (view && view->role != WF_VIEW_ROLE_TOPLEVEL)
@@ -123,6 +130,20 @@ class vswitch : public wayfire_plugin_t
 
         duration.start();
     }
+
+    signal_callback_t on_set_workspace_request = [=] (signal_data *data)
+    {
+        if (is_active())
+            return;
+
+        auto ev = static_cast<change_viewport_signal*> (data);
+
+        GetTuple(ox, oy, ev->old_viewport);
+        GetTuple(vx, vy, ev->new_viewport);
+
+        ev->carried_out = true;
+        add_direction(vx - ox, vy - oy);
+    };
 
     std::vector<wayfire_view> get_ws_views()
     {
@@ -220,7 +241,7 @@ class vswitch : public wayfire_plugin_t
 
     void fini()
     {
-        if (output->is_plugin_active(grab_interface->name))
+        if (!is_active())
             stop_switch();
 
         output->rem_binding(&callback_left);
@@ -234,6 +255,8 @@ class vswitch : public wayfire_plugin_t
         output->rem_binding(&callback_win_down);
 
         output->rem_binding(&gesture_cb);
+        output->disconnect_signal("set-workspace-request",
+            &on_set_workspace_request);
     }
 };
 
