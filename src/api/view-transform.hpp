@@ -11,9 +11,15 @@
 
 enum wf_transformer_z_order
 {
+    /* Simple 2D transforms */
     WF_TRANSFORMER_2D = 1,
+    /* 3D transforms */
     WF_TRANSFORMER_3D = 2,
+    /* Highlevels transforms and above do special effects, for ex. wobbly or fire */
     WF_TRANSFORMER_HIGHLEVEL = 500,
+    /* Do not use Z oder blur or more,
+     * except if you are willing to break it */
+    WF_TRANSFORMER_BLUR = 999,
 };
 
 class wf_view_transformer_t

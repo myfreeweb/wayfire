@@ -2,8 +2,10 @@
 #include <core.hpp>
 #include <debug.hpp>
 #include <view.hpp>
-#include <workspace-manager.hpp>
+#include <view-transform.hpp>
 #include <render-manager.hpp>
+#include <workspace-manager.hpp>
+
 #include <queue>
 #include <linux/input.h>
 #include <utility>
@@ -12,14 +14,24 @@
 #include "view-change-viewport-signal.hpp"
 #include "../wobbly/wobbly-signal.hpp"
 
-
-#define MAX_DIRS_IN_QUEUE 4
-
-struct switch_direction
+class vswitch_view_transformer : public wf_2D_view
 {
-    int dx, dy;
-    wayfire_view view;
+    public:
+        static const std::string name;
+        vswitch_view_transformer(wayfire_view view) : wf_2D_view(view) {}
+        virtual uint32_t get_z_order() override { return WF_TRANSFORMER_BLUR - 1; }
 };
+const std::string vswitch_view_transformer::name = "vswitch-transformer";
+
+static double clamp(double x, double s, double e)
+{
+    if (x < s)
+        return s;
+    if (x > e)
+        return e;
+
+    return x;
+}
 
 class vswitch : public wayfire_plugin_t
 {
@@ -29,16 +41,13 @@ class vswitch : public wayfire_plugin_t
 
         gesture_callback gesture_cb;
 
-        std::queue<switch_direction> dirs; // series of moves we have to do
-
         wf_duration duration;
-        wf_option animation_duration, use_wobbly;
+        wf_transition dx, dy;
+        wayfire_view grabbed_view = nullptr;
 
-        bool running = false;
-        effect_hook_t hook;
+        wf_option animation_duration;
 
     public:
-
     wayfire_view get_top_view()
     {
         auto ws = output->workspace->get_current_workspace();
@@ -86,192 +95,132 @@ class vswitch : public wayfire_plugin_t
 
         animation_duration = section->get_option("duration", "180");
         duration = wf_duration(animation_duration);
-
-        use_wobbly = section->get_option("use_wobbly", "0");
-        hook = std::bind(std::mem_fn(&vswitch::slide_update), this);
     }
 
-    void add_direction(int dx, int dy, wayfire_view view = nullptr)
+    void add_direction(int x, int y, wayfire_view view = nullptr)
     {
+        if (!x && !y)
+            return;
+
+        if (!output->is_plugin_active(grab_interface->name))
+            start_switch();
+
         if (view && view->role != WF_VIEW_ROLE_TOPLEVEL)
             view = nullptr;
 
-        if (!running)
-            dirs.push({0, 0, view});
+        if (view && !grabbed_view)
+            grabbed_view = view;
 
-        if (dirs.size() < MAX_DIRS_IN_QUEUE)
-            dirs.push({dx, dy, view});
-
-        /* this is the first direction, we have pushed {0, 0} so that slide_done()
-         * will do nothing on the first time */
-        if (!running && start_switch())
-            slide_done();
-    }
-
-    float sx, sy, tx, ty;
-
-    struct animating_view {
-        wayfire_view v;
-        wf_geometry bounding_box;
-        int ox, oy;
-        int anchor_x, anchor_y;
-    };
-    std::vector<animating_view> views;
-
-    void slide_update()
-    {
-        float dx = duration.progress(sx, tx);
-        float dy = duration.progress(sy, ty);
-        for (auto v : views)
-        {
-            v.v->move(v.ox + dx, v.oy + dy);
-            if (use_wobbly->as_cached_int())
-                move_wobbly(v.v, v.anchor_x + dx, v.anchor_y + dy);
-        }
-
-        if (!duration.running())
-            slide_done();
-    }
-
-    void slide_done()
-    {
-        auto front = dirs.front();
-        dirs.pop();
-
+        /* Make sure that when we add this direction, we won't go outside
+         * of the workspace grid */
         GetTuple(vx, vy, output->workspace->get_current_workspace());
-        auto old_ws = output->workspace->get_current_workspace();
-        int dx = front.dx, dy = front.dy;
+        GetTuple(vw, vh, output->workspace->get_workspace_grid_size());
+        int tvx = clamp(vx + dx.end + x, 0, vw - 1);
+        int tvy = clamp(vy + dy.end + y, 0, vh - 1);
 
-        vx += dx;
-        vy += dy;
-        auto output_g = output->get_relative_geometry();
-
-        for (auto v : views)
-        {
-            v.v->move(v.ox, v.oy);
-            v.v->set_moving(false);
-
-            if (use_wobbly->as_cached_int())
-            {
-                end_wobbly(v.v);
-                translate_wobbly(v.v, dx * output_g.width, dy * output_g.height);
-            }
-        }
-
-        output->workspace->set_workspace(std::make_tuple(vx, vy));
-        if (front.view)
-        {
-            front.view->move(front.view->get_wm_geometry().x + dx * output_g.width,
-                             front.view->get_wm_geometry().y + dy * output_g.height);
-
-            if (use_wobbly->as_cached_int())
-                translate_wobbly(front.view, dx * output_g.width, dy * output_g.height);
-
-            output->focus_view(front.view);
-
-            view_change_viewport_signal data;
-            data.view = front.view;
-            data.from = old_ws;
-            data.to = output->workspace->get_current_workspace();
-
-            output->emit_signal("view-change-viewport", &data);
-        }
-
-        for (auto v : views)
-        {
-            if (use_wobbly->as_cached_int())
-                snap_wobbly(v.v, v.bounding_box + wf_point{-dx * output_g.width, -dy * output_g.height});
-        }
-
-        views.clear();
-
-        if (dirs.size() == 0) {
-            stop_switch();
-            return;
-        }
+        dx = {duration.progress(dx), 1.0 * tvx - vx};
+        dy = {duration.progress(dy), 1.0 * tvy - vy};
 
         duration.start();
-        dx = dirs.front().dx, dy = dirs.front().dy;
-        wayfire_view static_view = front.view;
+    }
 
-        GetTuple(sw, sh, output->get_screen_size());
-        sx = sy = 0;
-        tx = -dx * sw;
-        ty = -dy * sh;
-
-        GetTuple(vwidth, vheight, output->workspace->get_workspace_grid_size());
-        if (vx + dx < 0 || vx + dx >= vwidth || vy + dy < 0 || vy + dy >= vheight)
+    std::vector<wayfire_view> get_ws_views()
+    {
+        std::vector<wayfire_view> views;
+        output->workspace->for_each_view([&](wayfire_view view)
         {
-            stop_switch();
-            return;
-        }
+            if (view != grabbed_view)
+                views.push_back(view);
+        }, WF_MIDDLE_LAYERS);
 
-        auto current_views = output->workspace->get_views_on_workspace(
-                output->workspace->get_current_workspace(), WF_MIDDLE_LAYERS, false);
-        auto next_views =
-            output->workspace->get_views_on_workspace(std::make_tuple(vx + dx, vy + dy), WF_MIDDLE_LAYERS, false);
-
-        std::set<wayfire_view> views_to_move;
-
-        for (auto view : current_views)
-            views_to_move.insert(view);
-        for (auto view : next_views)
-            views_to_move.insert(view);
-
-        for (auto view : views_to_move)
-        {
-            if (view->is_mapped() && !view->destroyed && view != static_view)
-            {
-                view->set_moving(true);
-                animating_view av;
-                av.v = view;
-
-                av.bounding_box = view->get_output_geometry();
-                av.anchor_x = av.bounding_box.x;// + av.bounding_box.width / 2;
-                av.anchor_y = av.bounding_box.y;// + av.bounding_box.height / 2;
-
-                if (use_wobbly->as_cached_int())
-                    start_wobbly(view, av.anchor_x, av.anchor_y);
-
-                auto wm = view->get_wm_geometry();
-                av.ox = wm.x;
-                av.oy = wm.y;
-
-                views.push_back(av);
-            }
-        }
-
-        /* both workspaces are empty, so no animation, just switch */
-        if (views_to_move.empty())
-            slide_done();
+        return views;
     }
 
     bool start_switch()
     {
-        if (!output->activate_plugin(grab_interface)) {
-            dirs = std::queue<switch_direction> ();
+        if (!output->activate_plugin(grab_interface))
             return false;
-        }
 
-        running = true;
-        output->render->add_effect(&hook, WF_OUTPUT_EFFECT_PRE);
+        output->render->add_effect(&update_animation, WF_OUTPUT_EFFECT_PRE);
         output->render->auto_redraw(true);
+
+        duration.start();
+        dx = dy = {0, 0};
+
+        for (auto view : get_ws_views())
+        {
+            if (!view->get_transformer(vswitch_view_transformer::name))
+            {
+                view->add_transformer(
+                    nonstd::make_unique<vswitch_view_transformer>(view),
+                    vswitch_view_transformer::name);
+            }
+        }
 
         return true;
     }
 
+    effect_hook_t update_animation = [=] ()
+    {
+        if (!duration.running())
+            return stop_switch();
+
+        GetTuple(sw, sh, output->get_screen_size());
+        for (auto view : get_ws_views())
+        {
+            auto tr = dynamic_cast<vswitch_view_transformer*> (
+                view->get_transformer(vswitch_view_transformer::name).get());
+
+            view->damage();
+            tr->translation_x = -duration.progress(dx) * sw;
+            tr->translation_y = -duration.progress(dy) * sh;
+            view->damage();
+        }
+    };
+
+    void slide_done()
+    {
+        GetTuple(vx, vy, output->workspace->get_current_workspace());
+        auto old_ws = output->workspace->get_current_workspace();
+
+        vx += dx.end;
+        vy += dy.end;
+
+        auto output_g = output->get_relative_geometry();
+        output->workspace->set_workspace(std::make_tuple(vx, vy));
+
+        if (grabbed_view)
+        {
+            auto wm = grabbed_view->get_wm_geometry();
+            grabbed_view->move(wm.x + dx.end * output_g.width,
+                wm.y + dy.end * output_g.height);
+
+            output->focus_view(grabbed_view);
+
+            view_change_viewport_signal data;
+            data.view = grabbed_view;
+            data.from = old_ws;
+            data.to = output->workspace->get_current_workspace();
+            output->emit_signal("view-change-viewport", &data);
+        }
+    }
+
     void stop_switch()
     {
+        slide_done();
+        grabbed_view = nullptr;
+
+        for (auto view : get_ws_views())
+            view->pop_transformer(vswitch_view_transformer::name);
+
         output->deactivate_plugin(grab_interface);
-        dirs = std::queue<switch_direction> ();
-        running = false;
-        output->render->rem_effect(&hook, WF_OUTPUT_EFFECT_PRE);
+        output->render->rem_effect(&update_animation, WF_OUTPUT_EFFECT_PRE);
         output->render->auto_redraw(false);
     }
 
     void fini()
     {
-        if (running)
+        if (output->is_plugin_active(grab_interface->name))
             stop_switch();
 
         output->rem_binding(&callback_left);

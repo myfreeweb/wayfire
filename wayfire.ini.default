@@ -223,7 +223,6 @@ binding_win_left = <super> <shift> KEY_LEFT
 binding_win_right = <super> <shift> KEY_RIGHT
 binding_win_up = <super> <shift> KEY_UP
 duration = 300
-use_wobbly = 0
 
 # zoom in the desktop by scrolling + modifier
 [zoom]

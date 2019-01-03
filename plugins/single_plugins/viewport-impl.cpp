@@ -332,7 +332,11 @@ void viewport_manager::set_workspace(std::tuple<int, int> nPos)
 {
     GetTuple(nx, ny, nPos);
     if(nx >= vwidth || ny >= vheight || nx < 0 || ny < 0)
+    {
+        log_error("Attempt to set invalid workspace: %d,%d,"
+            " workspace grid size is %dx%d", nx, ny, vwidth, vheight);
         return;
+    }
 
     if (nx == vx && ny == vy)
     {

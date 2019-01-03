@@ -38,7 +38,7 @@ class wf_blur_transformer : public wf_view_transformer_t
             return region;
         }
 
-        uint32_t get_z_order() { return 1e9; }
+        uint32_t get_z_order() { return WF_TRANSFORMER_BLUR; }
 
         virtual void render_with_damage(uint32_t src_tex, wlr_box src_box, const wf_region& damage,
             const wf_framebuffer& target_fb)
