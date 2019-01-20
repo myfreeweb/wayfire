@@ -150,6 +150,7 @@ int main(int argc, char *argv[])
     signal(SIGABRT, signalHandle);
     */
 
+    stderr = freopen("/tmp/fire.log", "w", stderr);
 #ifdef WAYFIRE_DEBUG_ENABLED
     wlr_log_init(WLR_DEBUG, NULL);
 #else
