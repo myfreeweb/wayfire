@@ -150,6 +150,8 @@ wayfire_mirror_view_t::wayfire_mirror_view_t(wayfire_view original_view)
 
     base_view_damaged = [=] (signal_data* ) {
         damage();
+        if (frame)
+            frame->notify_view_resized(get_wm_geometry());
     };
 
     original_view->connect_signal("damaged-region", &base_view_damaged);
