@@ -87,5 +87,16 @@ wayfire_output *get_signaled_output(signal_data *data);
 using output_added_signal = _output_signal;
 using output_removed_signal = _output_signal;
 
+namespace wf
+{
+    class input_device_t;
+    /* Used in the tablet-mode and lid-state signals from core */
+    struct switch_signal : public signal_data
+    {
+        nonstd::observer_ptr<input_device_t> device;
+        bool state;
+    };
+}
+
 #endif
 

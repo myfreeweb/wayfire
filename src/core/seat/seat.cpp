@@ -3,6 +3,7 @@
 #include "input-manager.hpp"
 #include "render-manager.hpp"
 #include "debug.hpp"
+#include "signal-definitions.hpp"
 #include "../../view/priv-view.hpp"
 
 extern "C"
@@ -226,6 +227,13 @@ static void handle_device_destroy_cb(wl_listener *listener, void*)
     core->input->handle_input_destroyed(wrapper->self->get_wlr_handle());
 }
 
+static void handle_device_switch_cb(wl_listener *listener, void* data)
+{
+    wf_input_device_internal::wlr_wrapper *wrapper = wl_container_of(listener, wrapper, switched);
+    auto ev = (wlr_event_switch_toggle*) data;
+    wrapper->self->handle_switched(ev);
+}
+
 wf_input_device_internal::wf_input_device_internal(wlr_input_device *dev)
     : wf::input_device_t(dev)
 {
@@ -235,11 +243,42 @@ wf_input_device_internal::wf_input_device_internal(wlr_input_device *dev)
     _wrapper.destroy.notify = handle_device_destroy_cb;
 
     wl_signal_add(&dev->events.destroy, &_wrapper.destroy);
+
+    if (dev->type == WLR_INPUT_DEVICE_SWITCH)
+    {
+        _wrapper.switched.notify = handle_device_switch_cb;
+        wl_signal_add(&dev->switch_device->events.toggle, &_wrapper.switched);
+    } else
+    {
+        _wrapper.switched.notify = nullptr;
+    }
 }
 
 wf_input_device_internal::~wf_input_device_internal()
 {
+    if (_wrapper.switched.notify)
+        wl_list_remove(&_wrapper.switched.link);
     wl_list_remove(&_wrapper.destroy.link);
+}
+
+void wf_input_device_internal::handle_switched(wlr_event_switch_toggle *ev)
+{
+    wf::switch_signal data;
+    data.device = nonstd::make_observer(this);
+    data.state = (ev->switch_state == WLR_SWITCH_STATE_ON);
+
+    std::string event_name;
+    switch (ev->switch_type)
+    {
+        case WLR_SWITCH_TYPE_TABLET_MODE:
+            event_name = "tablet-mode";
+            break;
+        case WLR_SWITCH_TYPE_LID:
+            event_name = "lid-state";
+            break;
+    }
+
+    core->emit_signal(event_name, &data);
 }
 
 void wf_input_device_internal::update_options()

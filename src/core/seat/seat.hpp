@@ -6,6 +6,7 @@ extern "C"
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_switch.h>
 }
 
 #include "output.hpp"
@@ -30,10 +31,12 @@ class wf_input_device_internal : public wf::input_device_t
     ~wf_input_device_internal();
 
     struct wlr_wrapper {
+        wl_listener switched;
         wl_listener destroy;
         wf_input_device_internal* self;
     } _wrapper;
 
+    void handle_switched(wlr_event_switch_toggle *ev);
     void update_options();
 
     static struct config_t
