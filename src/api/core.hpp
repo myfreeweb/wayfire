@@ -2,6 +2,7 @@
 #define CORE_HPP
 
 #include "object.hpp"
+#include "input-device.hpp"
 
 #include <functional>
 #include <memory>
@@ -143,6 +144,8 @@ class wayfire_core : public wf_object_base
 
         wayfire_surface_t *get_cursor_focus();
         wayfire_surface_t *get_touch_focus();
+
+        std::vector<nonstd::observer_ptr<wf::input_device_t>> get_input_devices();
 
         void add_view(std::unique_ptr<wayfire_view_t> view);
 

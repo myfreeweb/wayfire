@@ -86,9 +86,6 @@ class input_manager
 
         void update_drag_icon();
 
-        std::vector<std::unique_ptr<wf_keyboard>> keyboards;
-        std::vector<std::unique_ptr<wf_input_device>> input_devices;
-
         /* TODO: move this in a wf_keyboard struct,
          * This might not work with multiple keyboards */
         uint32_t mod_binding_key = 0; /* The keycode which triggered the modifier binding */
@@ -122,6 +119,9 @@ class input_manager
 
         int pointer_count = 0, touch_count = 0;
         void update_capabilities();
+
+        std::vector<std::unique_ptr<wf_keyboard>> keyboards;
+        std::vector<std::unique_ptr<wf_input_device_internal>> input_devices;
 
         void set_keyboard_focus(wayfire_view view, wlr_seat *seat);
 

@@ -50,7 +50,7 @@ void input_manager::handle_new_input(wlr_input_device *dev)
         create_seat();
 
     log_info("handle new input: %s, default mapping: %s", dev->name, dev->output_name);
-    input_devices.push_back(std::make_unique<wf_input_device> (dev));
+    input_devices.push_back(std::make_unique<wf_input_device_internal> (dev));
 
     if (dev->type == WLR_INPUT_DEVICE_KEYBOARD)
         keyboards.push_back(std::make_unique<wf_keyboard> (dev, core->config));
@@ -86,7 +86,7 @@ void input_manager::handle_input_destroyed(wlr_input_device *dev)
     log_info("remove input: %s", dev->name);
 
     auto it = std::remove_if(input_devices.begin(), input_devices.end(),
-        [=] (const std::unique_ptr<wf_input_device>& idev) { return idev->device == dev; });
+        [=] (const std::unique_ptr<wf_input_device_internal>& idev) { return idev->get_wlr_handle() == dev; });
     input_devices.erase(it, input_devices.end());
 
     if (dev->type == WLR_INPUT_DEVICE_KEYBOARD)

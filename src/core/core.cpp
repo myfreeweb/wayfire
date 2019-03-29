@@ -127,7 +127,7 @@ static void handle_input_inhibit_deactivated(wl_listener*, void*)
 void wayfire_core::init(wayfire_config *conf)
 {
     configure(conf);
-    wf_input_device::config.load(conf);
+    wf_input_device_internal::config.load(conf);
 
     protocols.data_device = wlr_data_device_manager_create(display);
     protocols.data_control = wlr_data_control_manager_v1_create(display);
@@ -256,6 +256,16 @@ wayfire_surface_t *wayfire_core::get_cursor_focus()
 wayfire_surface_t *wayfire_core::get_touch_focus()
 {
     return input->touch_focus;
+}
+
+std::vector<nonstd::observer_ptr<wf::input_device_t>>
+wayfire_core::get_input_devices()
+{
+    std::vector<nonstd::observer_ptr<wf::input_device_t>> list;
+    for (auto& dev : input->input_devices)
+        list.push_back(nonstd::make_observer(dev.get()));
+
+    return list;
 }
 
 static int _last_output_id = 0;

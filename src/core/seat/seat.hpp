@@ -9,6 +9,7 @@ extern "C"
 }
 
 #include "output.hpp"
+#include "input-device.hpp"
 
 struct wf_drag_icon : public wayfire_surface_t
 {
@@ -22,15 +23,15 @@ struct wf_drag_icon : public wayfire_surface_t
     void damage(const wlr_box& rect);
 };
 
-struct wf_input_device
+class wf_input_device_internal : public wf::input_device_t
 {
-    wlr_input_device *device;
-    wf_input_device(wlr_input_device* dev);
-    ~wf_input_device();
+    public:
+    wf_input_device_internal(wlr_input_device* dev);
+    ~wf_input_device_internal();
 
     struct wlr_wrapper {
         wl_listener destroy;
-        wf_input_device* self;
+        wf_input_device_internal* self;
     } _wrapper;
 
     void update_options();
@@ -50,7 +51,6 @@ struct wf_input_device
 
         void load(wayfire_config *config);
     } config;
-
 };
 
 #endif /* end of include guard: SEAT_HPP */

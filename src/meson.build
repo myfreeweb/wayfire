@@ -65,7 +65,8 @@ install_headers(['api/compositor-surface.hpp',
                  'api/util.hpp',
                  'api/view-transform.hpp',
                  'api/view.hpp',
-                 'api/workspace-manager.hpp'],
+                 'api/workspace-manager.hpp',
+                 'api/input-device.hpp'],
                 subdir: 'wayfire')
 
 pkgconfig = import('pkgconfig')

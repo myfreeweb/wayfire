@@ -161,8 +161,53 @@ void input_manager::create_seat()
     wl_signal_add(&seat->events.request_set_primary_selection, &request_set_primary_selection);
 }
 
-wf_input_device::config_t wf_input_device::config;
-void wf_input_device::config_t::load(wayfire_config *config)
+namespace wf
+{
+    wlr_input_device* input_device_t::get_wlr_handle()
+    {
+        return handle;
+    }
+
+    bool input_device_t::set_enabled(bool enabled)
+    {
+        if (enabled == is_enabled())
+            return true;
+
+        if (!wlr_input_device_is_libinput(handle))
+            return false;
+
+        auto dev = wlr_libinput_get_device_handle(handle);
+        assert(dev);
+
+        libinput_device_config_send_events_set_mode(dev,
+            enabled ?  LIBINPUT_CONFIG_SEND_EVENTS_ENABLED :
+                LIBINPUT_CONFIG_SEND_EVENTS_DISABLED);
+
+        return true;
+    }
+
+    bool input_device_t::is_enabled()
+    {
+        /* Currently no support for enabling/disabling non-libinput devices */
+        if (!wlr_input_device_is_libinput(handle))
+            return true;
+
+        auto dev = wlr_libinput_get_device_handle(handle);
+        assert(dev);
+
+        auto mode = libinput_device_config_send_events_get_mode(dev);
+        return mode == LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
+    }
+
+    input_device_t::input_device_t(wlr_input_device *handle)
+    {
+        this->handle = handle;
+    }
+}
+
+
+wf_input_device_internal::config_t wf_input_device_internal::config;
+void wf_input_device_internal::config_t::load(wayfire_config *config)
 {
     auto section = (*config)["input"];
     mouse_cursor_speed              = section->get_option("mouse_cursor_speed", "0");
@@ -177,13 +222,13 @@ void wf_input_device::config_t::load(wayfire_config *config)
 
 static void handle_device_destroy_cb(wl_listener *listener, void*)
 {
-    wf_input_device::wlr_wrapper *wrapper = wl_container_of(listener, wrapper, destroy);
-    core->input->handle_input_destroyed(wrapper->self->device);
+    wf_input_device_internal::wlr_wrapper *wrapper = wl_container_of(listener, wrapper, destroy);
+    core->input->handle_input_destroyed(wrapper->self->get_wlr_handle());
 }
 
-wf_input_device::wf_input_device(wlr_input_device *dev)
+wf_input_device_internal::wf_input_device_internal(wlr_input_device *dev)
+    : wf::input_device_t(dev)
 {
-    device = dev;
     update_options();
 
     _wrapper.self = this;
@@ -192,18 +237,18 @@ wf_input_device::wf_input_device(wlr_input_device *dev)
     wl_signal_add(&dev->events.destroy, &_wrapper.destroy);
 }
 
-wf_input_device::~wf_input_device()
+wf_input_device_internal::~wf_input_device_internal()
 {
     wl_list_remove(&_wrapper.destroy.link);
 }
 
-void wf_input_device::update_options()
+void wf_input_device_internal::update_options()
 {
     /* We currently support options only for libinput devices */
-    if (!wlr_input_device_is_libinput(device))
+    if (!wlr_input_device_is_libinput(get_wlr_handle()))
         return;
 
-    auto dev = wlr_libinput_get_device_handle(device);
+    auto dev = wlr_libinput_get_device_handle(get_wlr_handle());
     assert(dev);
 
     /* we are configuring a touchpad */
