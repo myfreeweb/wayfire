@@ -54,15 +54,11 @@ using render_hook_t = std::function<void(const wf_framebuffer& fb)>;
 struct wf_output_damage;
 class render_manager : public wf_signal_provider_t
 {
-    friend void redraw_idle_cb(void *data);
-    friend void damage_idle_cb(void *data);
-    friend void frame_cb (wl_listener*, void *data);
-
     private:
         wayfire_output *output;
-        wl_event_source *idle_redraw_source = NULL, *idle_damage_source = NULL;
 
-        wl_listener frame_listener;
+        wf::wl_idle_call idle_redraw, idle_damage;
+        wf::wl_listener_wrapper on_frame;
 
         signal_callback_t output_resized;
 

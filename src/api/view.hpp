@@ -40,7 +40,8 @@ class wayfire_surface_t
         // number of commits to this surface or any child since the surface was created
         int64_t buffer_age = 0;
 
-        wl_listener committed, destroy, new_sub;
+        wf::wl_listener_wrapper::callback_t handle_new_subsurface;
+        wf::wl_listener_wrapper on_commit, on_destroy, on_new_subsurface;
         virtual void for_each_surface_recursive(wf_surface_iterator_callback callback,
                                                 int x, int y, bool reverse = false);
         wayfire_output *output = nullptr;
@@ -227,11 +228,11 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
          * The handle is automatically destroyed when the view is unmapped */
         wlr_foreign_toplevel_handle_v1 *toplevel_handle = NULL;
 
-        wl_listener toplevel_handle_v1_maximize_request,
-                    toplevel_handle_v1_activate_request,
-                    toplevel_handle_v1_minimize_request,
-                    toplevel_handle_v1_set_rectangle_request,
-                    toplevel_handle_v1_close_request;
+        wf::wl_listener_wrapper toplevel_handle_v1_maximize_request,
+                                toplevel_handle_v1_activate_request,
+                                toplevel_handle_v1_minimize_request,
+                                toplevel_handle_v1_set_rectangle_request,
+                                toplevel_handle_v1_close_request;
 
         wlr_box minimize_hint;
 

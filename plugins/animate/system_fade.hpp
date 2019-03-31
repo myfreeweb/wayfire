@@ -15,9 +15,6 @@ extern "C"
 #undef static
 }
 
-
-void destroy_system_fade(void *data);
-
 /* animates wake from suspend/startup by fading in the whole output */
 class wf_system_fade
 {
@@ -72,14 +69,8 @@ class wf_system_fade
             output->render->rem_effect(&render_hook);
             output->render->auto_redraw(false);
 
-            wl_event_loop_add_idle(core->ev_loop, destroy_system_fade, this);
+            delete this;
         }
 };
-
-void destroy_system_fade(void *data)
-{
-    wf_system_fade *fade = (wf_system_fade*) data;
-    delete fade;
-}
 
 #endif

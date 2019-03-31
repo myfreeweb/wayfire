@@ -3,6 +3,7 @@
 
 #include "config.hpp"
 #include "seat.hpp"
+#include "util.hpp"
 
 extern "C"
 {
@@ -12,15 +13,11 @@ extern "C"
 
 struct wf_keyboard
 {
+    wf::wl_listener_wrapper on_key, on_modifier;
+    void setup_listeners();
+
     wlr_keyboard *handle;
     wlr_input_device *device;
-
-    /* so that we can safely use wl_container_of */
-    struct listeners
-    {
-        wl_listener key, modifier;
-        wf_keyboard *keyboard;
-    } lss;
 
     wf_option model, variant, layout, options, rules;
     wf_option repeat_rate, repeat_delay;

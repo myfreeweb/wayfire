@@ -26,19 +26,7 @@ extern "C"
 
 wf_runtime_config runtime_config;
 
-static wl_listener output_created;
-void output_created_cb (wl_listener*, void *data)
-{
-    core->add_output((wlr_output*) data);
-}
-
-void compositor_wake_cb (wl_listener*, void*)
-{
-}
-
-void compositor_sleep_cb (wl_listener*, void*)
-{
-}
+static wf::wl_listener_wrapper on_output_created;
 
 #define INOT_BUF_SIZE (1024 * sizeof(inotify_event))
 char buf[INOT_BUF_SIZE];
@@ -227,15 +215,16 @@ int main(int argc, char *argv[])
 
     core->wayland_display = server_name;
 
-    output_created.notify = output_created_cb;
-    wl_signal_add(&core->backend->events.new_output, &output_created);
+    on_output_created.set_callback([&] (void *data) {
+        core->add_output((wlr_output*) data);
+    });
+    on_output_created.connect(&core->backend->events.new_output);
 
     if (!wlr_backend_start(core->backend))
     {
         log_error("failed to initialize backend, exiting");
         wlr_backend_destroy(core->backend);
         wl_display_destroy(core->display);
-
         return -1;
     }
 

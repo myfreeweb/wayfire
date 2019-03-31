@@ -252,16 +252,11 @@ void wayfire_output::set_initial_mode()
     }
 }
 
-static void handle_output_destroyed(wl_listener *, void *data)
-{
-    core->remove_output(core->get_output((wlr_output*) data));
-}
-
 wayfire_output::wayfire_output(wlr_output *handle, wayfire_config *c)
 {
     this->handle = handle;
-    this->destroy_listener.notify = handle_output_destroyed;
-    wl_signal_add(&handle->events.destroy, &this->destroy_listener);
+    on_handle_destroy.set_callback([&] (void*) {core->remove_output(this); });
+    on_handle_destroy.connect(&handle->events.destroy);
 
     set_initial_mode();
     set_initial_scale();
@@ -338,8 +333,6 @@ wayfire_output::~wayfire_output()
 
     delete workspace;
     delete render;
-
-    wl_list_remove(&destroy_listener.link);
 }
 
 wf_geometry wayfire_output::get_relative_geometry()

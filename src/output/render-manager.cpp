@@ -96,16 +96,6 @@ struct wf_output_damage
     }
 };
 
-void frame_cb (wl_listener*, void *data)
-{
-    auto output_damage = static_cast<wlr_output_damage*>(data);
-    assert(output_damage);
-
-    auto output = core->get_output(output_damage->output);
-    assert(output);
-    output->render->paint();
-}
-
 render_manager::render_manager(wayfire_output *o)
 {
     output = o;
@@ -114,8 +104,8 @@ render_manager::render_manager(wayfire_output *o)
     output_damage = std::unique_ptr<wf_output_damage>(new wf_output_damage(output->handle));
     output_damage->add();
 
-    frame_listener.notify = frame_cb;
-    wl_signal_add(&output_damage->damage_manager->events.frame, &frame_listener);
+    on_frame.set_callback([&] (void*) { paint(); });
+    on_frame.connect(&output_damage->damage_manager->events.frame);
 
     init_default_streams();
     schedule_redraw();
@@ -139,13 +129,6 @@ void render_manager::init_default_streams()
 
 render_manager::~render_manager()
 {
-    wl_list_remove(&frame_listener.link);
-
-    if (idle_redraw_source)
-        wl_event_source_remove(idle_redraw_source);
-    if (idle_damage_source)
-        wl_event_source_remove(idle_damage_source);
-
     for (auto& row : output_streams)
     {
         for (auto& stream : row)
@@ -174,20 +157,11 @@ void render_manager::damage_whole()
     output_damage->add({-vx * sw, -vy * sh, vw * sw, vh * sh});
 }
 
-void damage_idle_cb(void *data)
-{
-    auto rm = (render_manager*) data;
-    assert(rm);
-
-    rm->damage_whole();
-    rm->idle_damage_source = NULL;
-}
-
 void render_manager::damage_whole_idle()
 {
     damage_whole();
-    if (!idle_damage_source)
-        idle_damage_source = wl_event_loop_add_idle(core->ev_loop, damage_idle_cb, this);
+    if (!idle_damage.is_connected())
+        idle_damage.run_once([&] () { damage_whole(); });
 }
 
 void render_manager::damage(const wlr_box& box)
@@ -242,15 +216,6 @@ wf_framebuffer render_manager::get_target_framebuffer() const
     return fb;
 }
 
-void redraw_idle_cb(void *data)
-{
-    wayfire_output *output = (wayfire_output*) data;
-    assert(output);
-
-    wlr_output_schedule_frame(output->handle);
-    output->render->idle_redraw_source = NULL;
-}
-
 void render_manager::auto_redraw(bool redraw)
 {
     constant_redraw += (redraw ? 1 : -1);
@@ -278,8 +243,12 @@ void render_manager::add_inhibit(bool add)
 
 void render_manager::schedule_redraw()
 {
-    if (idle_redraw_source == NULL)
-        idle_redraw_source = wl_event_loop_add_idle(core->ev_loop, redraw_idle_cb, output);
+    if (!idle_redraw.is_connected())
+    {
+        idle_redraw.run_once([&] () {
+            wlr_output_schedule_frame(output->handle);
+        });
+    }
 }
 
 /* return damage from this frame for the given workspace, coordinates

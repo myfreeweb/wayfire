@@ -4,11 +4,6 @@
 #include "decorator.hpp"
 #include "xdg-shell.hpp"
 
-static void handle_xdg_map(wl_listener*, void *data);
-static void handle_xdg_unmap(wl_listener*, void *data);
-static void handle_xdg_popup_destroy(wl_listener*, void *data);
-static void handle_xdg_destroy(wl_listener*, void *data);
-
 /* TODO: Figure out a way to animate this */
 wayfire_xdg_popup::wayfire_xdg_popup(wlr_xdg_popup *popup)
     :wayfire_surface_t(wf_surface_from_void(popup->parent->data))
@@ -16,18 +11,17 @@ wayfire_xdg_popup::wayfire_xdg_popup(wlr_xdg_popup *popup)
     assert(parent_surface);
     this->popup = popup;
 
-    destroy.notify       = handle_xdg_popup_destroy;
-    new_popup.notify     = handle_xdg_new_popup;
-    m_popup_map.notify   = handle_xdg_map;
-    m_popup_unmap.notify = handle_xdg_unmap;
+    on_map.set_callback([&] (void*) { map(this->popup->base->surface); });
+    on_unmap.set_callback([&] (void*) { unmap(); });
+    on_destroy.set_callback([&] (void*) { destroyed = 1; dec_keep_count(); });
+    on_new_popup.set_callback([&] (void* data) { create_xdg_popup((wlr_xdg_popup*) data); });
 
-    wl_signal_add(&popup->base->events.new_popup, &new_popup);
-    wl_signal_add(&popup->base->events.map,       &m_popup_map);
-    wl_signal_add(&popup->base->events.unmap,     &m_popup_unmap);
-    wl_signal_add(&popup->base->events.destroy,   &destroy);
+    on_map.connect(&popup->base->events.map);
+    on_unmap.connect(&popup->base->events.unmap);
+    on_destroy.connect(&popup->base->events.destroy);
+    on_new_popup.connect(&popup->base->events.new_popup);
 
     popup->base->data = this;
-
     unconstrain();
 }
 
@@ -47,10 +41,10 @@ void wayfire_xdg_popup::unconstrain()
 
 wayfire_xdg_popup::~wayfire_xdg_popup()
 {
-    wl_list_remove(&new_popup.link);
-    wl_list_remove(&m_popup_map.link);
-    wl_list_remove(&m_popup_unmap.link);
-    wl_list_remove(&destroy.link);
+    on_map.disconnect();
+    on_unmap.disconnect();
+    on_destroy.disconnect();
+    on_new_popup.disconnect();
 }
 
 void wayfire_xdg_popup::get_child_position(int &x, int &y)
@@ -75,9 +69,8 @@ void wayfire_xdg_popup::send_done()
         wlr_xdg_popup_destroy(popup->base);
 }
 
-void handle_xdg_new_popup(wl_listener*, void *data)
+void create_xdg_popup(wlr_xdg_popup *popup)
 {
-    auto popup = static_cast<wlr_xdg_popup*> (data);
     auto parent = wf_surface_from_void(popup->parent->data);
     if (!parent)
     {
@@ -88,105 +81,6 @@ void handle_xdg_new_popup(wl_listener*, void *data)
     new wayfire_xdg_popup(popup);
 }
 
-static void handle_xdg_map(wl_listener*, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto wf_surface = wf_surface_from_void(surface->data);
-
-    assert(wf_surface);
-    wf_surface->map(surface->surface);
-}
-
-static void handle_xdg_unmap(wl_listener*, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto wf_surface = wf_surface_from_void(surface->data);
-
-    assert(wf_surface);
-    wf_surface->unmap();
-}
-
-static void handle_xdg_destroy(wl_listener*, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto view = wf_view_from_void(surface->data);
-
-    assert(view);
-
-    view->destroy();
-}
-
-static void handle_xdg_popup_destroy(wl_listener*, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto wf_surface = wf_surface_from_void(surface->data);
-
-    wf_surface->destroyed = 1;
-    wf_surface->dec_keep_count();
-}
-
-static void handle_xdg_request_move(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_xdg_toplevel_move_event*> (data);
-    auto view = wf_view_from_void(ev->surface->data);
-    view->move_request();
-}
-
-static void handle_xdg_request_resize(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_xdg_toplevel_resize_event*> (data);
-    auto view = wf_view_from_void(ev->surface->data);
-
-    view->resize_request(ev->edges);
-}
-
-static void handle_xdg_request_maximized(wl_listener*, void *data)
-{
-    auto surf = static_cast<wlr_xdg_surface*> (data);
-    auto view = wf_view_from_void(surf->data);
-    view->maximize_request(surf->toplevel->client_pending.maximized);
-}
-
-static void handle_xdg_request_minimized(wl_listener*, void *data)
-{
-    auto surf = static_cast<wlr_xdg_surface*> (data);
-    auto view = wf_view_from_void(surf->data);
-    view->minimize_request(true);
-}
-
-static void handle_xdg_request_fullscreen(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_xdg_toplevel_set_fullscreen_event*> (data);
-    auto view = wf_view_from_void(ev->surface->data);
-    auto wo = core->get_output(ev->output);
-    view->fullscreen_request(wo, ev->fullscreen);
-}
-
-static void handle_xdg_set_parent(wl_listener* listener, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto view = wf_view_from_void(surface->data);
-    auto parent = surface->toplevel->parent ?
-        wf_view_from_void(surface->toplevel->parent->data)->self() : nullptr;
-
-    assert(view);
-    view->set_toplevel_parent(parent);
-}
-
-static void handle_xdg_set_title(wl_listener *listener, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto view = wf_view_from_void(surface->data);
-    view->handle_title_changed();
-}
-
-static void handle_xdg_set_app_id(wl_listener *listener, void *data)
-{
-    auto surface = static_cast<wlr_xdg_surface*> (data);
-    auto view = wf_view_from_void(surface->data);
-    view->handle_app_id_changed();
-}
-
 wayfire_xdg_view::wayfire_xdg_view(wlr_xdg_surface *s)
     : wayfire_view_t(), xdg_surface(s)
 {
@@ -194,34 +88,45 @@ wayfire_xdg_view::wayfire_xdg_view(wlr_xdg_surface *s)
               nonull(xdg_surface->toplevel->title),
               nonull(xdg_surface->toplevel->app_id));
 
-    destroy_ev.notify         = handle_xdg_destroy;
-    new_popup.notify          = handle_xdg_new_popup;
-    map_ev.notify             = handle_xdg_map;
-    unmap_ev.notify           = handle_xdg_unmap;
-    set_title.notify          = handle_xdg_set_title;
-    set_app_id.notify         = handle_xdg_set_app_id;
-    set_parent_ev.notify      = handle_xdg_set_parent;
-    request_move.notify       = handle_xdg_request_move;
-    request_resize.notify     = handle_xdg_request_resize;
-    request_maximize.notify   = handle_xdg_request_maximized;
-    request_minimize.notify   = handle_xdg_request_minimized;
-    request_fullscreen.notify = handle_xdg_request_fullscreen;
+    on_map.set_callback([&] (void*) { map(this->xdg_surface->surface); });
+    on_unmap.set_callback([&] (void*) { unmap(); });
+    on_destroy.set_callback([&] (void*) { destroyed = 1; dec_keep_count(); });
+    on_new_popup.set_callback([&] (void* data) { create_xdg_popup((wlr_xdg_popup*) data); });
+    on_set_title.set_callback([&] (void*) { handle_title_changed(); });
+    on_set_app_id.set_callback([&] (void*) { handle_app_id_changed(); });
+    on_set_parent.set_callback([&] (void*) {
+        auto parent = xdg_surface->toplevel->parent ?
+            wf_view_from_void(xdg_surface->toplevel->parent->data)->self() : nullptr;
+        set_toplevel_parent(parent);
+    });
+
+    on_request_move.set_callback([&] (void*) { move_request(); });
+    on_request_resize.set_callback([&] (void*) { resize_request(); });
+    on_request_minimize.set_callback([&] (void*) { minimize_request(true); });
+    on_request_maximize.set_callback([&] (void* data) {
+        maximize_request(xdg_surface->toplevel->client_pending.maximized);
+    });
+    on_request_fullscreen.set_callback([&] (void* data) {
+        auto ev = static_cast<wlr_xdg_toplevel_set_fullscreen_event*> (data);
+        auto wo = core->get_output(ev->output);
+        fullscreen_request(wo, ev->fullscreen);
+    });
+
+    on_map.connect(&xdg_surface->events.map);
+    on_unmap.connect(&xdg_surface->events.unmap);
+    on_destroy.connect(&xdg_surface->events.destroy);
+    on_new_popup.connect(&xdg_surface->events.new_popup);
+
+    on_set_title.connect(&xdg_surface->toplevel->events.set_title);
+    on_set_app_id.connect(&xdg_surface->toplevel->events.set_app_id);
+    on_set_parent.connect(&xdg_surface->toplevel->events.set_parent);
+    on_request_move.connect(&xdg_surface->toplevel->events.request_move);
+    on_request_resize.connect(&xdg_surface->toplevel->events.request_resize);
+    on_request_maximize.connect(&xdg_surface->toplevel->events.request_maximize);
+    on_request_minimize.connect(&xdg_surface->toplevel->events.request_minimize);
+    on_request_fullscreen.connect(&xdg_surface->toplevel->events.request_fullscreen);
 
     wlr_xdg_surface_ping(s);
-
-    wl_signal_add(&xdg_surface->events.destroy, &destroy_ev);
-    wl_signal_add(&s->events.new_popup,         &new_popup);
-    wl_signal_add(&xdg_surface->events.map,     &map_ev);
-    wl_signal_add(&xdg_surface->events.unmap,   &unmap_ev);
-    wl_signal_add(&xdg_surface->toplevel->events.set_title,          &set_title);
-    wl_signal_add(&xdg_surface->toplevel->events.set_app_id,         &set_app_id);
-    wl_signal_add(&xdg_surface->toplevel->events.set_parent,         &set_parent_ev);
-    wl_signal_add(&xdg_surface->toplevel->events.request_move,       &request_move);
-    wl_signal_add(&xdg_surface->toplevel->events.request_resize,     &request_resize);
-    wl_signal_add(&xdg_surface->toplevel->events.request_maximize,   &request_maximize);
-    wl_signal_add(&xdg_surface->toplevel->events.request_minimize,   &request_minimize);
-    wl_signal_add(&xdg_surface->toplevel->events.request_fullscreen, &request_fullscreen);
-
     xdg_surface->data = this;
 }
 
@@ -301,17 +206,6 @@ wf_geometry wayfire_xdg_view::get_wm_geometry()
 
 void wayfire_xdg_view::activate(bool act)
 {
-    /*
-    if (!act)
-    {
-        for_each_surface([] (wayfire_surface_t* surface, int, int)
-        {
-            auto popup = dynamic_cast<wayfire_xdg_popup*> (surface);
-            if (popup)
-                popup->send_done();
-        });
-    } */
-
     /* we don't send activated or deactivated for shell views,
      * they should always be active */
     if (this->role == WF_VIEW_ROLE_SHELL_VIEW)
@@ -377,18 +271,18 @@ void wayfire_xdg_view::close()
 
 void wayfire_xdg_view::destroy()
 {
-    wl_list_remove(&destroy_ev.link);
-    wl_list_remove(&new_popup.link);
-    wl_list_remove(&map_ev.link);
-    wl_list_remove(&unmap_ev.link);
-    wl_list_remove(&request_move.link);
-    wl_list_remove(&request_resize.link);
-    wl_list_remove(&request_maximize.link);
-    wl_list_remove(&request_minimize.link);
-    wl_list_remove(&request_fullscreen.link);
-    wl_list_remove(&set_parent_ev.link);
-    wl_list_remove(&set_title.link);
-    wl_list_remove(&set_app_id.link);
+    on_map.disconnect();
+    on_unmap.disconnect();
+    on_destroy.disconnect();
+    on_new_popup.disconnect();
+    on_set_title.disconnect();
+    on_set_app_id.disconnect();
+    on_set_parent.disconnect();
+    on_request_move.disconnect();
+    on_request_resize.disconnect();
+    on_request_maximize.disconnect();
+    on_request_minimize.disconnect();
+    on_request_fullscreen.disconnect();
 
     xdg_surface = nullptr;
     wayfire_view_t::destroy();
@@ -396,21 +290,18 @@ void wayfire_xdg_view::destroy()
 
 wayfire_xdg_view::~wayfire_xdg_view() {}
 
-static void notify_created(wl_listener*, void *data)
-{
-    auto surf = static_cast<wlr_xdg_surface*> (data);
-    if (surf->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
-        core->add_view(std::make_unique<wayfire_xdg_view> (surf));
-}
-
 static wlr_xdg_shell *xdg_handle;
-static wl_listener xdg_created;
-
 void init_xdg_shell()
 {
-    xdg_created.notify = notify_created;
+    static wf::wl_listener_wrapper on_created;
     xdg_handle = wlr_xdg_shell_create(core->display);
-    log_info("create xdg shell is %p", xdg_handle);
     if (xdg_handle)
-        wl_signal_add(&xdg_handle->events.new_surface, &xdg_created);
+    {
+        on_created.set_callback([&] (void *data) {
+            auto surf = static_cast<wlr_xdg_surface*> (data);
+            if (surf->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+                core->add_view(std::make_unique<wayfire_xdg_view> (surf));
+        });
+        on_created.connect(&xdg_handle->events.new_surface);
+    }
 }

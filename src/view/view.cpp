@@ -43,66 +43,6 @@ std::string wayfire_view_t::to_string() const
     return "view-" + wf_object_base::to_string();
 }
 
-static void handle_toplevel_handle_v1_maximize_request(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_foreign_toplevel_handle_v1_maximized_event*> (data);
-    auto view = wf_view_from_void(ev->toplevel->data);
-
-    view->maximize_request(ev->maximized);
-}
-
-static void handle_toplevel_handle_v1_minimize_request(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_foreign_toplevel_handle_v1_minimized_event*> (data);
-    auto view = wf_view_from_void(ev->toplevel->data);
-
-    view->minimize_request(ev->minimized);
-}
-
-static void handle_toplevel_handle_v1_activate_request(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_foreign_toplevel_handle_v1_activated_event*> (data);
-    auto view = wf_view_from_void(ev->toplevel->data);
-
-    view->focus_request();
-}
-
-static void handle_toplevel_handle_v1_set_rectangle_request(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_foreign_toplevel_handle_v1_set_rectangle_event*> (data);
-    auto view = wf_view_from_void(ev->toplevel->data);
-
-    auto surface = wf_surface_from_void(ev->surface->data);
-    if (!surface)
-    {
-        log_error("Setting minimize hint to unknown surface.");
-        return;
-    }
-
-    if (surface->get_output() != view->get_output())
-    {
-        log_info("Minimize hint set to surface on a different output, "
-            "problems might arise");
-        /* TODO: translate coordinates in case minimize hint is on another output */
-    }
-
-    auto box = surface->get_output_geometry();
-    box.x += ev->x;
-    box.y += ev->y;
-    box.width = ev->width;
-    box.height = ev->height;
-
-    view->handle_minimize_hint(box);
-}
-
-static void handle_toplevel_handle_v1_close_request(wl_listener*, void *data)
-{
-    auto toplevel = static_cast<wlr_foreign_toplevel_handle_v1*> (data);
-    auto view = wf_view_from_void(toplevel->data);
-
-    view->close();
-}
-
 void wayfire_view_t::create_toplevel()
 {
     if (toplevel_handle)
@@ -114,28 +54,53 @@ void wayfire_view_t::create_toplevel()
 
     toplevel_handle = wlr_foreign_toplevel_handle_v1_create(
         core->protocols.toplevel_manager);
-    toplevel_handle->data = this;
 
-    toplevel_handle_v1_maximize_request.notify =
-        handle_toplevel_handle_v1_maximize_request;
-    toplevel_handle_v1_minimize_request.notify =
-        handle_toplevel_handle_v1_minimize_request;
-    toplevel_handle_v1_activate_request.notify =
-        handle_toplevel_handle_v1_activate_request;
-    toplevel_handle_v1_set_rectangle_request.notify =
-        handle_toplevel_handle_v1_set_rectangle_request;
-    toplevel_handle_v1_close_request.notify =
-        handle_toplevel_handle_v1_close_request;
-    wl_signal_add(&toplevel_handle->events.request_maximize,
-        &toplevel_handle_v1_maximize_request);
-    wl_signal_add(&toplevel_handle->events.request_minimize,
-        &toplevel_handle_v1_minimize_request);
-    wl_signal_add(&toplevel_handle->events.request_activate,
-        &toplevel_handle_v1_activate_request);
-    wl_signal_add(&toplevel_handle->events.set_rectangle,
-        &toplevel_handle_v1_set_rectangle_request);
-    wl_signal_add(&toplevel_handle->events.request_close,
-        &toplevel_handle_v1_close_request);
+    toplevel_handle_v1_maximize_request.set_callback([&] (void *data) {
+        auto ev = static_cast<wlr_foreign_toplevel_handle_v1_maximized_event*> (data);
+        maximize_request(ev->maximized);
+    });
+    toplevel_handle_v1_minimize_request.set_callback([&] (void *data) {
+        auto ev = static_cast<wlr_foreign_toplevel_handle_v1_minimized_event*> (data);
+        minimize_request(ev->minimized);
+    });
+    toplevel_handle_v1_activate_request.set_callback([&] (void *) { focus_request(); });
+    toplevel_handle_v1_close_request.set_callback([&] (void *) { close(); });
+    toplevel_handle_v1_set_rectangle_request.set_callback([&] (void *data) {
+        auto ev = static_cast<wlr_foreign_toplevel_handle_v1_set_rectangle_event*> (data);
+
+        auto surface = wf_surface_from_void(ev->surface->data);
+        if (!surface)
+        {
+            log_error("Setting minimize hint to unknown surface.");
+            return;
+        }
+
+        if (surface->get_output() != get_output())
+        {
+            log_info("Minimize hint set to surface on a different output, "
+                "problems might arise");
+            /* TODO: translate coordinates in case minimize hint is on another output */
+        }
+
+        auto box = surface->get_output_geometry();
+        box.x += ev->x;
+        box.y += ev->y;
+        box.width = ev->width;
+        box.height = ev->height;
+
+        handle_minimize_hint(box);
+    });
+
+    toplevel_handle_v1_maximize_request.connect(
+        &toplevel_handle->events.request_maximize);
+    toplevel_handle_v1_minimize_request.connect(
+        &toplevel_handle->events.request_minimize);
+    toplevel_handle_v1_activate_request.connect(
+        &toplevel_handle->events.request_activate);
+    toplevel_handle_v1_set_rectangle_request.connect(
+        &toplevel_handle->events.set_rectangle);
+    toplevel_handle_v1_close_request.connect(
+        &toplevel_handle->events.request_close);
 
     toplevel_send_title();
     toplevel_send_app_id();
@@ -148,12 +113,11 @@ void wayfire_view_t::destroy_toplevel()
     if (!toplevel_handle)
         return;
 
-    toplevel_handle->data = NULL;
-    wl_list_remove(&toplevel_handle_v1_maximize_request.link);
-    wl_list_remove(&toplevel_handle_v1_activate_request.link);
-    wl_list_remove(&toplevel_handle_v1_minimize_request.link);
-    wl_list_remove(&toplevel_handle_v1_set_rectangle_request.link);
-    wl_list_remove(&toplevel_handle_v1_close_request.link);
+    toplevel_handle_v1_maximize_request.disconnect();
+    toplevel_handle_v1_activate_request.disconnect();
+    toplevel_handle_v1_minimize_request.disconnect();
+    toplevel_handle_v1_set_rectangle_request.disconnect();
+    toplevel_handle_v1_close_request.disconnect();
 
     wlr_foreign_toplevel_handle_v1_destroy(toplevel_handle);
     toplevel_handle = NULL;
@@ -1193,6 +1157,8 @@ void wayfire_view_t::fullscreen_request(wayfire_output *out, bool state)
     auto wo = (out ? out : (output ? output : core->get_active_output()));
     assert(wo);
 
+    /* TODO: what happens if the view is moved to the other output, but not
+     * fullscreened? We should make sure that it stays visible there */
     if (output != wo)
         core->move_view_to_output(self(), wo);
 

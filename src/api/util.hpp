@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <functional>
 #include <pixman.h>
+#include <nonstd/noncopyable.hpp>
 extern "C"
 {
 #include <wlr/types/wlr_box.h>
@@ -117,6 +118,86 @@ template<class T>
 T clamp(T value, T min, T max)
 {
     return std::min(std::max(value, min), max);
+}
+
+namespace wf
+{
+    /**
+     * A wrapper around wl_listener compatible with C++11 std::functions
+     */
+    struct wl_listener_wrapper : public noncopyable_t
+    {
+        using callback_t = std::function<void(void*)>;
+        wl_listener_wrapper();
+        ~wl_listener_wrapper();
+
+        /** Set the callback to be used when the signal is fired. Can be called
+         * multiple times to update it */
+        void set_callback(callback_t call);
+        /** Connect this callback to a signal. Calling this on an already
+         * connected listener will have no effect.
+         * @return true if connection was successful */
+        bool connect(wl_signal *signal);
+        /** Disconnect from the wl_signal. No-op if not connected */
+        void disconnect();
+        /** @return true if connected to a wl_signal */
+        bool is_connected() const;
+        /** Call the stored callback. No-op if no callback was specified */
+        void emit(void *data);
+
+        struct wrapper
+        {
+            wl_listener listener;
+            wl_listener_wrapper *self;
+        };
+        private:
+        callback_t call;
+        wrapper _wrap;
+    };
+
+    /**
+     * A wrapper for adding idle callbacks to the event loop
+     */
+    class wl_idle_call : public noncopyable_t
+    {
+        public:
+        using callback_t = std::function<void()>;
+        /* Initialize an empty idle call. set_event_loop() and set_callback()
+         * should be called before calls to run_once(), otherwise it won't
+         * have any effect */
+        wl_idle_call();
+        /** Will disconnect if connected */
+        ~wl_idle_call();
+
+        /** Set the event loop. This will disconnect the wl_idle_call if it
+         * is connected. If no event loop is set (or if NULL loop), the default
+         * loop from core is used */
+        void set_event_loop(wl_event_loop *loop);
+
+        /** Set the callback. This will disconnect the wl_idle_call if it is
+         * connected */
+        void set_callback(callback_t call);
+
+        /** Run the passed callback the next time the loop goes idle. No effect
+         * if already waiting for idleness, or if the callback hasn't been set. */
+        void run_once();
+
+        /* Same as calling set_callbck + run_once */
+        void run_once(callback_t call);
+
+        /** Stop waiting for idle, no-op if not connected */
+        void disconnect();
+        /** @return true if the event source is active */
+        bool is_connected();
+
+        /** execute the callback now. do not use manually! */
+        void execute();
+
+        private:
+        callback_t call;
+        wl_event_loop *loop = NULL;
+        wl_event_source *source = NULL;
+    };
 }
 
 #endif /* end of include guard: WF_UTIL_HPP */

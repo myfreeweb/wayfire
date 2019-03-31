@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include "plugin.hpp"
 #include "config.h"
+#include "util.hpp"
 
 class wayfire_output;
 class wayfire_config;
@@ -13,7 +14,7 @@ struct plugin_manager
     ~plugin_manager();
 
     void reload_dynamic_plugins();
-    wl_event_source *idle_reload_dynamic_plugins = NULL;
+    wf::wl_idle_call idle_reaload_plugins;
 
 private:
     wayfire_config *config;

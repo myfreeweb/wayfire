@@ -10,39 +10,37 @@ extern "C"
 class wayfire_xdg_popup : public wayfire_surface_t
 {
     protected:
-        wl_listener destroy,
-                    new_popup, destroy_popup,
-                    m_popup_map, m_popup_unmap;
+    wf::wl_listener_wrapper on_destroy, on_new_popup, on_map, on_unmap;
 
-        wlr_xdg_popup *popup;
-        wlr_xdg_surface *xdg_surface;
+    wlr_xdg_popup *popup;
+    wlr_xdg_surface *xdg_surface;
+    void unconstrain();
 
-        void unconstrain();
     public:
-        wayfire_xdg_popup(wlr_xdg_popup *popup);
-        ~wayfire_xdg_popup();
+    wayfire_xdg_popup(wlr_xdg_popup *popup);
+    ~wayfire_xdg_popup();
 
-        virtual void get_child_position(int &x, int &y);
-        virtual void get_child_offset(int &x, int &y);
+    virtual void get_child_position(int &x, int &y);
+    virtual void get_child_offset(int &x, int &y);
 
-        virtual bool is_subsurface() { return true; }
-        virtual void send_done();
+    virtual bool is_subsurface() { return true; }
+    virtual void send_done();
 };
 
-void handle_xdg_new_popup(wl_listener*, void*);
-
+void create_xdg_popup(wlr_xdg_popup *popup);
 class wayfire_xdg_view : public wayfire_view_t
 {
     protected:
-        wl_listener destroy_ev, map_ev, unmap_ev, new_popup,
-                request_move, request_minimize, request_resize,
-                request_maximize, request_fullscreen,
-                set_parent_ev, set_title, set_app_id;
+    wf::wl_listener_wrapper on_map, on_unmap, on_destroy, on_new_popup,
+                            on_request_move, on_request_resize,
+                            on_request_minimize, on_request_maximize,
+                            on_request_fullscreen, on_set_parent,
+                            on_set_title, on_set_app_id;
 
-        wf_point xdg_surface_offset = {0, 0};
+    wf_point xdg_surface_offset = {0, 0};
 
     public:
-        wlr_xdg_surface *xdg_surface;
+    wlr_xdg_surface *xdg_surface;
 
     wayfire_xdg_view(wlr_xdg_surface *s);
     virtual void map(wlr_surface *surface);

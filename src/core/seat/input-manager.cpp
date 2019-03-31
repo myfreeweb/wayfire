@@ -37,13 +37,6 @@ void input_manager::update_capabilities()
     wlr_seat_set_capabilities(seat, cap);
 }
 
-void handle_new_input_cb(wl_listener*, void *data)
-{
-    auto dev = static_cast<wlr_input_device*> (data);
-    assert(dev);
-    core->input->handle_new_input(dev);
-}
-
 void input_manager::handle_new_input(wlr_input_device *dev)
 {
     if (!cursor)
@@ -111,11 +104,13 @@ void input_manager::handle_input_destroyed(wlr_input_device *dev)
 
 input_manager::input_manager()
 {
-    input_device_created.notify = handle_new_input_cb;
+    input_device_created.set_callback([&] (void *data) {
+        auto dev = static_cast<wlr_input_device*> (data);
+        assert(dev);
+        core->input->handle_new_input(dev);
+    });
+    input_device_created.connect(&core->backend->events.new_input);
     seat = wlr_seat_create(core->display, "default");
-
-    wl_signal_add(&core->backend->events.new_input,
-                  &input_device_created);
 
     surface_map_state_changed = [=] (signal_data *data)
     {
@@ -193,12 +188,6 @@ bool input_manager::grab_input(wayfire_grab_interface iface)
     return true;
 }
 
-static void idle_update_cursor(void *data)
-{
-    auto input = (input_manager*) data;
-    input->update_cursor_position(get_current_time(), false);
-}
-
 void input_manager::ungrab_input()
 {
     if (active_grab)
@@ -209,7 +198,9 @@ void input_manager::ungrab_input()
      * pointer event (button press/release, maybe something else) will be sent to
      * the client, which shouldn't happen (at the time of the event, there was
      * still an active input grab) */
-    wl_event_loop_add_idle(core->ev_loop, idle_update_cursor, this);
+    idle_update_cursor.run_once([&] () {
+        update_cursor_position(get_current_time(), false);
+    });
 }
 
 bool input_manager::input_grabbed()

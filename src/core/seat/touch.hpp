@@ -40,7 +40,7 @@ private:
 
 struct wf_touch
 {
-    wl_listener down, up, motion;
+    wf::wl_listener_wrapper on_down, on_up, on_motion;
     wf_gesture_recognizer gesture_recognizer;
     wlr_cursor *cursor;
 

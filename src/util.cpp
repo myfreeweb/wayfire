@@ -1,5 +1,6 @@
 #include "util.hpp"
 #include <debug.hpp>
+#include <core.hpp>
 #include <ctime>
 
 extern "C"
@@ -309,4 +310,117 @@ uint32_t get_current_time()
     clock_gettime(CLOCK_MONOTONIC, &ts);
 
     return timespec_to_msec(ts);
+}
+
+static void handle_wrapped_listener(wl_listener *listener, void *data)
+{
+    wf::wl_listener_wrapper::wrapper *wrap = wl_container_of(listener, wrap, listener);
+    wrap->self->emit(data);
+}
+
+static void handle_idle_listener(void *data)
+{
+    auto call = (wf::wl_idle_call*)(data);
+    call->execute();
+}
+
+namespace wf
+{
+    wl_listener_wrapper::wl_listener_wrapper()
+    {
+        _wrap.self = this;
+        _wrap.listener.notify = handle_wrapped_listener;
+        wl_list_init(&_wrap.listener.link);
+    }
+
+    wl_listener_wrapper::~wl_listener_wrapper()
+    {
+        disconnect();
+    }
+
+    void wl_listener_wrapper::set_callback(callback_t _call)
+    {
+        this->call = _call;
+    }
+
+    bool wl_listener_wrapper::connect(wl_signal *signal)
+    {
+        if (is_connected())
+            return false;
+
+        wl_signal_add(signal, &_wrap.listener);
+        return true;
+    }
+
+    void wl_listener_wrapper::disconnect()
+    {
+        wl_list_remove(&_wrap.listener.link);
+        wl_list_init(&_wrap.listener.link);
+    }
+
+    bool wl_listener_wrapper::is_connected() const
+    {
+        return !wl_list_empty(&_wrap.listener.link);
+    }
+
+    void wl_listener_wrapper::emit(void *data)
+    {
+        if (this->call)
+            this->call(data);
+    }
+
+    wl_idle_call::wl_idle_call() = default;
+    wl_idle_call::~wl_idle_call()
+    {
+        disconnect();
+    }
+
+    void wl_idle_call::set_event_loop(wl_event_loop *loop)
+    {
+        disconnect();
+        this->loop = loop;
+    }
+
+    void wl_idle_call::set_callback(callback_t call)
+    {
+        disconnect();
+        this->call = call;
+    }
+
+    void wl_idle_call::run_once()
+    {
+        if (!call || source)
+            return;
+
+        auto use_loop = loop ?: core->ev_loop;
+        source = wl_event_loop_add_idle(use_loop, handle_idle_listener, this);
+    }
+
+    void wl_idle_call::run_once(callback_t cb)
+    {
+        set_callback(cb);
+        run_once();
+    }
+
+    void wl_idle_call::disconnect()
+    {
+        if (!source)
+            return;
+
+        wl_event_source_remove(source);
+        source = nullptr;
+    }
+
+    bool wl_idle_call::is_connected()
+    {
+        return source;
+    }
+
+    void wl_idle_call::execute()
+    {
+        if (call)
+            call();
+
+        source = nullptr;
+    }
 }

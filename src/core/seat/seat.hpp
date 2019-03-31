@@ -15,7 +15,7 @@ extern "C"
 struct wf_drag_icon : public wayfire_surface_t
 {
     wlr_drag_icon *icon;
-    wl_listener map_ev, unmap_ev, destroy;
+    wf::wl_listener_wrapper on_map, on_unmap, on_destroy;
 
     wf_drag_icon(wlr_drag_icon *icon);
 
@@ -28,13 +28,8 @@ class wf_input_device_internal : public wf::input_device_t
 {
     public:
     wf_input_device_internal(wlr_input_device* dev);
-    ~wf_input_device_internal();
 
-    struct wlr_wrapper {
-        wl_listener switched;
-        wl_listener destroy;
-        wf_input_device_internal* self;
-    } _wrapper;
+    wf::wl_listener_wrapper on_switch, on_destroy;
 
     void handle_switched(wlr_event_switch_toggle *ev);
     void update_options();

@@ -37,7 +37,7 @@ static uint32_t zwlr_layer_to_wf_layer(zwlr_layer_shell_v1_layer layer)
 
 class wayfire_layer_shell_view : public wayfire_view_t
 {
-    wl_listener map_ev, unmap_ev, destroy_ev, new_popup;
+    wf::wl_listener_wrapper on_map, on_unmap, on_destroy, on_new_popup;
     public:
         wlr_layer_surface_v1 *lsurface;
         wlr_layer_surface_v1_state prev_state;
@@ -266,11 +266,6 @@ struct wf_layer_shell_manager
 };
 
 static wf_layer_shell_manager layer_shell_manager;
-
-static void handle_layer_surface_map(wl_listener*, void *data);
-static void handle_layer_surface_unmap(wl_listener*, void *data);
-static void handle_layer_surface_destroy(wl_listener*, void *data);
-
 wayfire_layer_shell_view::wayfire_layer_shell_view(wlr_layer_surface_v1 *lsurf)
     : wayfire_view_t(), lsurface(lsurf)
 {
@@ -301,25 +296,27 @@ wayfire_layer_shell_view::wayfire_layer_shell_view(wlr_layer_surface_v1 *lsurf)
     role = WF_VIEW_ROLE_SHELL_VIEW;
     lsurface->data = this;
 
-    map_ev.notify     = handle_layer_surface_map;
-    unmap_ev.notify   = handle_layer_surface_unmap;
-    new_popup.notify  = handle_xdg_new_popup;
-    destroy_ev.notify = handle_layer_surface_destroy;
+    on_map.set_callback([&] (void*) { map(lsurface->surface); });
+    on_unmap.set_callback([&] (void*) { unmap(); });
+    on_destroy.set_callback([&] (void*) { destroyed = 1; dec_keep_count(); });
+    on_new_popup.set_callback([&] (void *data) {
+        create_xdg_popup((wlr_xdg_popup*) data);
+    });
 
-    wl_signal_add(&lsurface->events.map,       &map_ev);
-    wl_signal_add(&lsurface->events.unmap,     &unmap_ev);
-    wl_signal_add(&lsurface->events.new_popup, &new_popup);
-    wl_signal_add(&lsurface->events.destroy,   &destroy_ev);
+    on_map.connect(&lsurface->events.map);
+    on_unmap.connect(&lsurface->events.unmap);
+    on_destroy.connect(&lsurface->events.destroy);
+    on_new_popup.connect(&lsurface->events.new_popup);
 
     layer_shell_manager.arrange_unmapped_view(this);
 }
 
 void wayfire_layer_shell_view::destroy()
 {
-    wl_list_remove(&map_ev.link);
-    wl_list_remove(&unmap_ev.link);
-    wl_list_remove(&destroy_ev.link);
-    wl_list_remove(&new_popup.link);
+    on_map.disconnect();
+    on_unmap.disconnect();
+    on_destroy.disconnect();
+    on_new_popup.disconnect();
 
     wayfire_view_t::destroy();
 }
@@ -411,45 +408,19 @@ void wayfire_layer_shell_view::configure(wf_geometry box)
     wlr_layer_surface_v1_configure(lsurface, box.width, box.height);
 }
 
-static void handle_layer_surface_map(wl_listener*, void *data)
-{
-    auto lsurface = static_cast<wlr_layer_surface_v1*> (data);
-    auto view = wf_view_from_void(lsurface->data);
-
-    view->map(lsurface->surface);
-}
-
-static void handle_layer_surface_unmap(wl_listener*, void *data)
-{
-    auto lsurface = static_cast<wlr_layer_surface_v1*> (data);
-    auto view = wf_view_from_void(lsurface->data);
-
-    view->unmap();
-}
-
-static void handle_layer_surface_destroy(wl_listener*, void *data)
-{
-    auto lsurface = static_cast<wlr_layer_surface_v1*> (data);
-    auto view = wf_view_from_void(lsurface->data);
-
-    view->destroyed = 1;
-    view->dec_keep_count();
-}
-
-static void handle_layer_surface_created(wl_listener *listener, void *data)
-{
-    auto lsurf = static_cast<wlr_layer_surface_v1*> (data);
-    core->add_view(std::make_unique<wayfire_layer_shell_view> (lsurf));
-}
-
 static wlr_layer_shell_v1 *layer_shell_handle;
-wl_listener layer_surface_created;
-
 void init_layer_shell()
 {
-    layer_shell_handle = wlr_layer_shell_v1_create(core->display);
-    layer_surface_created.notify = handle_layer_surface_created;
+    static wf::wl_listener_wrapper on_created;
 
+    layer_shell_handle = wlr_layer_shell_v1_create(core->display);
     if (layer_shell_handle)
-        wl_signal_add(&layer_shell_handle->events.new_surface, &layer_surface_created);
+    {
+        on_created.set_callback([] (void *data) {
+            auto lsurf = static_cast<wlr_layer_surface_v1*> (data);
+            core->add_view(std::make_unique<wayfire_layer_shell_view> (lsurf));
+        });
+
+        on_created.connect(&layer_shell_handle->events.new_surface);
+    }
 }

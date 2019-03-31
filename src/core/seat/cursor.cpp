@@ -6,96 +6,6 @@
 #include "debug.hpp"
 #include "compositor-surface.hpp"
 
-static void handle_pointer_button_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_button*> (data);
-    if (!core->input->handle_pointer_button(ev))
-    {
-        /* start a button held grab, so that the window will receive all the
-         * subsequent events, no matter what happens */
-        if (core->input->cursor->count_pressed_buttons == 1 && core->get_cursor_focus())
-            core->input->cursor->start_held_grab(core->get_cursor_focus());
-
-        wlr_seat_pointer_notify_button(core->input->seat, ev->time_msec,
-            ev->button, ev->state);
-
-        /* end the button held grab. We need to to this here after we have send
-         * the last button release event, so that buttons don't get stuck in clients */
-        if (core->input->cursor->count_pressed_buttons == 0)
-            core->input->cursor->end_held_grab();
-    }
-
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_motion_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_motion*> (data);
-    core->input->handle_pointer_motion(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_motion_absolute_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_motion_absolute*> (data);
-    core->input->handle_pointer_motion_absolute(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_axis_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_axis*> (data);
-    core->input->handle_pointer_axis(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_swipe_begin_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_swipe_begin*> (data);
-    core->input->handle_pointer_swipe_begin(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_swipe_update_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_swipe_update*> (data);
-    core->input->handle_pointer_swipe_update(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_swipe_end_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_swipe_end*> (data);
-    core->input->handle_pointer_swipe_end(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_pinch_begin_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_pinch_begin*> (data);
-    core->input->handle_pointer_pinch_begin(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_pinch_update_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_pinch_update*> (data);
-    core->input->handle_pointer_pinch_update(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_pinch_end_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_event_pointer_pinch_end*> (data);
-    core->input->handle_pointer_pinch_end(ev);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_pointer_frame_cb(wl_listener*, void *data)
-{
-    core->input->handle_pointer_frame();
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
 
 bool input_manager::handle_pointer_button(wlr_event_pointer_button *ev)
 {
@@ -341,30 +251,7 @@ wf_cursor::wf_cursor()
     wlr_cursor_map_to_output(cursor, NULL);
     wlr_cursor_warp(cursor, NULL, cursor->x, cursor->y);
 
-    button.notify             = handle_pointer_button_cb;
-    motion.notify             = handle_pointer_motion_cb;
-    motion_absolute.notify    = handle_pointer_motion_absolute_cb;
-    axis.notify               = handle_pointer_axis_cb;
-    swipe_begin.notify        = handle_pointer_swipe_begin_cb;
-    swipe_update.notify       = handle_pointer_swipe_update_cb;
-    swipe_end.notify          = handle_pointer_swipe_end_cb;
-    pinch_begin.notify        = handle_pointer_pinch_begin_cb;
-    pinch_update.notify       = handle_pointer_pinch_update_cb;
-    pinch_end.notify          = handle_pointer_pinch_end_cb;
-    frame.notify              = handle_pointer_frame_cb;
-
-    wl_signal_add(&cursor->events.button, &button);
-    wl_signal_add(&cursor->events.motion, &motion);
-    wl_signal_add(&cursor->events.motion_absolute, &motion_absolute);
-    wl_signal_add(&cursor->events.axis, &axis);
-    wl_signal_add(&cursor->events.swipe_begin, &swipe_begin);
-    wl_signal_add(&cursor->events.swipe_update, &swipe_update);
-    wl_signal_add(&cursor->events.swipe_end, &swipe_end);
-    wl_signal_add(&cursor->events.pinch_begin, &pinch_begin);
-    wl_signal_add(&cursor->events.pinch_update, &pinch_update);
-    wl_signal_add(&cursor->events.pinch_end, &pinch_end);
-    wl_signal_add(&cursor->events.frame, &frame);
-
+    setup_listeners();
     init_xcursor();
 
     config_reloaded = [=] (signal_data*) {
@@ -376,6 +263,59 @@ wf_cursor::wf_cursor()
     touchpad_scroll_speed = section->get_option("touchpad_scroll_speed", "1");
 
     core->connect_signal("reload-config", &config_reloaded);
+}
+
+void wf_cursor::setup_listeners()
+{
+    on_button.set_callback([&] (void *data) {
+        this->handle_pointer_button((wlr_event_pointer_button*) data);
+        wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
+    });
+    on_button.connect(&cursor->events.button);
+
+    on_frame.set_callback([&] (void *) {
+        core->input->handle_pointer_frame();
+        wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
+    });
+    on_frame.connect(&cursor->events.frame);
+
+#define setup_passthrough_callback(evname) \
+    on_##evname.set_callback([&] (void *data) { \
+        auto ev = static_cast<wlr_event_pointer_##evname *> (data); \
+        core->input->handle_pointer_##evname (ev); \
+        wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat()); \
+    }); \
+    on_##evname.connect(&cursor->events.evname);
+
+    setup_passthrough_callback(motion);
+    setup_passthrough_callback(motion_absolute);
+    setup_passthrough_callback(axis);
+    setup_passthrough_callback(swipe_begin);
+    setup_passthrough_callback(swipe_update);
+    setup_passthrough_callback(swipe_end);
+    setup_passthrough_callback(pinch_begin);
+    setup_passthrough_callback(pinch_update);
+    setup_passthrough_callback(pinch_end);
+#undef setup_passthrough_callback
+}
+
+void wf_cursor::handle_pointer_button(wlr_event_pointer_button *ev)
+{
+    if (!core->input->handle_pointer_button(ev))
+    {
+        /* start a button held grab, so that the window will receive all the
+         * subsequent events, no matter what happens */
+        if (core->input->cursor->count_pressed_buttons == 1 && core->get_cursor_focus())
+            core->input->cursor->start_held_grab(core->get_cursor_focus());
+
+        wlr_seat_pointer_notify_button(core->input->seat, ev->time_msec,
+            ev->button, ev->state);
+
+        /* end the button held grab. We need to to this here after we have send
+         * the last button release event, so that buttons don't get stuck in clients */
+        if (core->input->cursor->count_pressed_buttons == 0)
+            core->input->cursor->end_held_grab();
+    }
 }
 
 void wf_cursor::init_xcursor()
@@ -450,18 +390,5 @@ void wf_cursor::end_held_grab()
 
 wf_cursor::~wf_cursor()
 {
-    wl_list_remove(&button.link);
-    wl_list_remove(&motion.link);
-    wl_list_remove(&motion_absolute.link);
-    wl_list_remove(&axis.link);
-    wl_list_remove(&swipe_begin.link);
-    wl_list_remove(&swipe_update.link);
-    wl_list_remove(&swipe_end.link);
-    wl_list_remove(&pinch_begin.link);
-    wl_list_remove(&pinch_update.link);
-    wl_list_remove(&pinch_end.link);
-    wl_list_remove(&frame.link);
-
     core->disconnect_signal("reload-config", &config_reloaded);
 }
-

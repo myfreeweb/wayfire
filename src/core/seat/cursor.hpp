@@ -27,10 +27,13 @@ struct wf_cursor
 
     void init_xcursor();
 
-    wl_listener button, motion, motion_absolute, axis,
-                swipe_begin, swipe_update, swipe_end,
-                pinch_begin, pinch_update, pinch_end,
-                frame;
+    void handle_pointer_button(wlr_event_pointer_button *ev);
+    void setup_listeners();
+    wf::wl_listener_wrapper on_button, on_motion, on_motion_absolute, on_axis,
+                            on_swipe_begin, on_swipe_update, on_swipe_end,
+                            on_pinch_begin, on_pinch_update, on_pinch_end,
+                            on_frame;
+
     signal_callback_t config_reloaded;
 
     wlr_cursor *cursor = NULL;

@@ -16,33 +16,36 @@ extern "C"
 #include "compositor-view.hpp"
 #include "input-inhibit.hpp"
 
-static void handle_keyboard_key_cb(wl_listener* listener, void *data)
+void wf_keyboard::setup_listeners()
 {
-    auto ev = static_cast<wlr_event_keyboard_key*> (data);
-    wf_keyboard::listeners *lss = wl_container_of(listener, lss, key);
-
-    auto seat = core->get_current_seat();
-    wlr_seat_set_keyboard(seat, lss->keyboard->device);
-
-    if (!core->input->handle_keyboard_key(ev->keycode, ev->state))
+    on_key.set_callback([&] (void *data)
     {
-        wlr_seat_keyboard_notify_key(core->input->seat, ev->time_msec,
-                                     ev->keycode, ev->state);
-    }
+        auto ev = static_cast<wlr_event_keyboard_key*> (data);
 
-    wlr_idle_notify_activity(core->protocols.idle, seat);
-}
+        auto seat = core->get_current_seat();
+        wlr_seat_set_keyboard(seat, this->device);
 
-static void handle_keyboard_mod_cb(wl_listener* listener, void* data)
-{
-    auto kbd = static_cast<wlr_keyboard*> (data);
-    wf_keyboard::listeners *lss = wl_container_of(listener, lss, modifier);
+        if (!core->input->handle_keyboard_key(ev->keycode, ev->state))
+        {
+            wlr_seat_keyboard_notify_key(core->input->seat, ev->time_msec,
+                ev->keycode, ev->state);
+        }
 
-    auto seat = core->get_current_seat();
-    wlr_seat_set_keyboard(seat, lss->keyboard->device);
-    wlr_seat_keyboard_send_modifiers(core->input->seat, &kbd->modifiers);
+        wlr_idle_notify_activity(core->protocols.idle, seat);
+    });
 
-    wlr_idle_notify_activity(core->protocols.idle, seat);
+    on_modifier.set_callback([&] (void *data)
+    {
+        auto kbd = static_cast<wlr_keyboard*> (data);
+        auto seat = core->get_current_seat();
+
+        wlr_seat_set_keyboard(seat, this->device);
+        wlr_seat_keyboard_send_modifiers(seat, &kbd->modifiers);
+        wlr_idle_notify_activity(core->protocols.idle, seat);
+    });
+
+    on_key.connect(&handle->events.key);
+    on_modifier.connect(&handle->events.modifiers);
 }
 
 wf_keyboard::wf_keyboard(wlr_input_device *dev, wayfire_config *config)
@@ -59,13 +62,7 @@ wf_keyboard::wf_keyboard(wlr_input_device *dev, wayfire_config *config)
     repeat_rate  = section->get_option("kb_repeat_rate", "40");
     repeat_delay = section->get_option("kb_repeat_delay", "400");
 
-    lss.keyboard = this;
-    lss.key.notify      = handle_keyboard_key_cb;
-    lss.modifier.notify = handle_keyboard_mod_cb;
-
-    wl_signal_add(&dev->keyboard->events.key,       &lss.key);
-    wl_signal_add(&dev->keyboard->events.modifiers, &lss.modifier);
-
+    setup_listeners();
     reload_input_options();
     wlr_seat_set_keyboard(core->get_current_seat(), dev);
 }
@@ -258,9 +255,11 @@ bool input_manager::handle_keyboard_key(uint32_t key, uint32_t state)
             auto section = core->config->get_section("input");
             auto timeout = section->get_option("modifier_binding_timeout", "0")->as_int();
             if (timeout <= 0 ||
-                    duration_cast<milliseconds>(steady_clock::now() - mod_binding_start)
+                duration_cast<milliseconds>(steady_clock::now() - mod_binding_start)
                     <= milliseconds(timeout))
+            {
                 callbacks = match_keys(get_modifiers() | mod, 0, mod_binding_key);
+            }
         }
 
         mod_binding_key = 0;

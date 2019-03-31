@@ -31,7 +31,7 @@ class wayfire_output : public wf_object_base
        plugin_manager *plugin;
        wayfire_view active_view, last_active_toplevel;
 
-       wl_listener destroy_listener;
+       wf::wl_listener_wrapper on_handle_destroy;
        signal_callback_t view_disappeared_cb;
 
        wf_option_callback config_mode_changed,

@@ -62,10 +62,10 @@ class input_manager
         wayfire_grab_interface active_grab = nullptr;
         bool session_active = true;
 
-        wl_listener input_device_created, request_start_drag, start_drag,
-                    request_set_cursor, request_set_selection,
-                    request_set_primary_selection;
-
+        wf::wl_listener_wrapper input_device_created, request_start_drag, start_drag,
+                                request_set_cursor, request_set_selection,
+                                request_set_primary_selection;
+        wf::wl_idle_call idle_update_cursor;
 
         signal_callback_t config_updated;
 
@@ -84,6 +84,7 @@ class input_manager
         wayfire_surface_t* input_surface_at(int x, int y,
             int& lx, int& ly);
 
+        void validate_drag_request(wlr_seat_request_start_drag_event *ev);
         void update_drag_icon();
 
         /* TODO: move this in a wf_keyboard struct,

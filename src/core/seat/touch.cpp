@@ -224,50 +224,44 @@ void wf_gesture_recognizer::unregister_touch(int32_t time, int32_t id)
     current.erase(id);
 }
 
-static void handle_touch_down(wl_listener* listener, void *data)
-{
-    auto ev = static_cast<wlr_event_touch_down*> (data);
-    auto touch = static_cast<wf_touch*> (ev->device->data);
-
-    double lx, ly;
-    wlr_cursor_absolute_to_layout_coords(core->input->cursor->cursor,
-                                         ev->device, ev->x, ev->y, &lx, &ly);
-    wlr_output_layout_closest_point(core->output_layout, NULL, lx, ly, &lx, &ly);
-
-    touch->gesture_recognizer.register_touch(ev->time_msec, ev->touch_id, lx, ly);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_touch_up(wl_listener* listener, void *data)
-{
-    auto ev = static_cast<wlr_event_touch_up*> (data);
-    auto touch = static_cast<wf_touch*> (ev->device->data);
-
-    touch->gesture_recognizer.unregister_touch(ev->time_msec, ev->touch_id);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
-static void handle_touch_motion(wl_listener* listener, void *data)
-{
-    auto ev = static_cast<wlr_event_touch_motion*> (data);
-    auto touch = static_cast<wf_touch*> (ev->device->data);
-
-    double lx, ly;
-    wlr_cursor_absolute_to_layout_coords(core->input->cursor->cursor,
-                                         ev->device, ev->x, ev->y, &lx, &ly);
-    touch->gesture_recognizer.update_touch(ev->time_msec, ev->touch_id, lx, ly);
-    wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
-}
-
 wf_touch::wf_touch(wlr_cursor *cursor)
 {
-    down.notify   = handle_touch_down;
-    up.notify     = handle_touch_up;
-    motion.notify = handle_touch_motion;
+    on_down.set_callback([&] (void *data)
+    {
+        auto ev = static_cast<wlr_event_touch_down*> (data);
 
-    wl_signal_add(&cursor->events.touch_up, &up);
-    wl_signal_add(&cursor->events.touch_down, &down);
-    wl_signal_add(&cursor->events.touch_motion, &motion);
+        double lx, ly;
+        wlr_cursor_absolute_to_layout_coords(core->input->cursor->cursor,
+            ev->device, ev->x, ev->y, &lx, &ly);
+        wlr_output_layout_closest_point(core->output_layout, NULL, lx, ly, &lx, &ly);
+
+        gesture_recognizer.register_touch(ev->time_msec, ev->touch_id, lx, ly);
+        wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
+    });
+
+    on_up.set_callback([&] (void *data)
+    {
+        auto ev = static_cast<wlr_event_touch_up*> (data);
+        gesture_recognizer.unregister_touch(ev->time_msec, ev->touch_id);
+        wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
+    });
+
+    on_motion.set_callback([&] (void *data)
+    {
+        auto ev = static_cast<wlr_event_touch_motion*> (data);
+        auto touch = static_cast<wf_touch*> (ev->device->data);
+
+        double lx, ly;
+        wlr_cursor_absolute_to_layout_coords(core->input->cursor->cursor,
+            ev->device, ev->x, ev->y, &lx, &ly);
+        wlr_output_layout_closest_point(core->output_layout, NULL, lx, ly, &lx, &ly);
+        touch->gesture_recognizer.update_touch(ev->time_msec, ev->touch_id, lx, ly);
+        wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
+    });
+
+    on_up.connect(&cursor->events.touch_up);
+    on_down.connect(&cursor->events.touch_down);
+    on_motion.connect(&cursor->events.touch_motion);
 
     this->cursor = cursor;
 }

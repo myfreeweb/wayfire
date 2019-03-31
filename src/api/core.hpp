@@ -1,6 +1,7 @@
 #ifndef CORE_HPP
 #define CORE_HPP
 
+#include "util.hpp"
 #include "object.hpp"
 #include "input-device.hpp"
 
@@ -60,11 +61,11 @@ class wayfire_core : public wf_object_base
         friend struct plugin_manager;
         friend class wayfire_output;
 
-        wl_listener output_layout_changed;
-        wl_listener decoration_created;
-        wl_listener vkbd_created;
-
-        wl_listener input_inhibit_activated, input_inhibit_deactivated;
+        wf::wl_listener_wrapper output_layout_changed;
+        wf::wl_listener_wrapper decoration_created;
+        wf::wl_listener_wrapper vkbd_created;
+        wf::wl_listener_wrapper input_inhibit_activated;
+        wf::wl_listener_wrapper input_inhibit_deactivated;
 
         wayfire_output *active_output;
         std::map<wlr_output*, wayfire_output*> outputs;

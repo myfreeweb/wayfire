@@ -11,40 +11,21 @@ extern "C"
 #include <wlr/backend/libinput.h>
 }
 
-static void handle_drag_icon_map(wl_listener* listener, void *data)
-{
-    auto wlr_icon = (wlr_drag_icon*) data;
-    auto icon = wf_surface_from_void(wlr_icon->data);
-    icon->map(wlr_icon->surface);
-}
-
-static void handle_drag_icon_unmap(wl_listener* listener, void *data)
-{
-    auto wlr_icon = (wlr_drag_icon*) data;
-    auto icon = wf_surface_from_void(wlr_icon->data);
-    icon->unmap();
-}
-
-static void handle_drag_icon_destroy(wl_listener*, void *)
-{
-    /* we don't dec_keep_count() because the surface memory is
-     * managed by the unique_ptr */
-    core->input->drag_icon = nullptr;
-    core->emit_signal("drag-stopped", nullptr);
-}
-
 wf_drag_icon::wf_drag_icon(wlr_drag_icon *ic)
     : wayfire_surface_t(nullptr), icon(ic)
 {
-    map_ev.notify   = handle_drag_icon_map;
-    unmap_ev.notify = handle_drag_icon_unmap;
-    destroy.notify  = handle_drag_icon_destroy;
+    on_map.set_callback([&] (void*) { this->map(icon->surface); });
+    on_unmap.set_callback([&] (void*) { this->unmap(); });
+    on_destroy.set_callback([&] (void*) {
+        /* we don't dec_keep_count() because the surface memory is
+         * managed by the unique_ptr */
+        core->input->drag_icon = nullptr;
+        core->emit_signal("drag-stopped", nullptr);
+    });
 
-    wl_signal_add(&icon->events.map, &map_ev);
-    wl_signal_add(&icon->events.unmap, &unmap_ev);
-    wl_signal_add(&icon->events.destroy, &destroy);
-
-    icon->data = this;
+    on_map.connect(&icon->events.map);
+    on_unmap.connect(&icon->events.unmap);
+    on_destroy.connect(&icon->events.destroy);
 }
 
 wf_point wf_drag_icon::get_output_position()
@@ -90,50 +71,26 @@ void wf_drag_icon::damage(const wlr_box& box)
     });
 }
 
-static void handle_request_start_drag_cb(wl_listener*, void *data)
+void input_manager::validate_drag_request(wlr_seat_request_start_drag_event *ev)
 {
-    auto ev = static_cast<wlr_seat_request_start_drag_event*> (data);
     auto seat = core->get_current_seat();
 
-    if (wlr_seat_validate_pointer_grab_serial(seat, ev->origin, ev->serial)) {
+    if (wlr_seat_validate_pointer_grab_serial(seat, ev->origin, ev->serial))
+    {
         wlr_seat_start_pointer_drag(seat, ev->drag, ev->serial);
         return;
     }
 
     struct wlr_touch_point *point;
-    if (wlr_seat_validate_touch_grab_serial(seat, ev->origin, ev->serial, &point)) {
+    if (wlr_seat_validate_touch_grab_serial(seat, ev->origin, ev->serial, &point))
+    {
         wlr_seat_start_touch_drag(seat, ev->drag, ev->serial, point);
         return;
     }
 
     log_debug("Ignoring start_drag request: "
-            "could not validate pointer or touch serial %" PRIu32, ev->serial);
+        "could not validate pointer or touch serial %" PRIu32, ev->serial);
     wlr_data_source_destroy(ev->drag->source);
-}
-
-static void handle_start_drag_cb(wl_listener*, void *data)
-{
-    auto d = static_cast<wlr_drag*> (data);
-    core->input->drag_icon = std::make_unique<wf_drag_icon> (d->icon);
-    core->emit_signal("drag-started", nullptr);
-}
-
-static void handle_request_set_cursor(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_seat_pointer_request_set_cursor_event*> (data);
-    core->input->cursor->set_cursor(ev);
-}
-
-static void handle_request_set_selection_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_seat_request_set_selection_event*> (data);
-    wlr_seat_set_selection(core->get_current_seat(), ev->source, ev->serial);
-}
-
-static void handle_request_set_primary_selection_cb(wl_listener*, void *data)
-{
-    auto ev = static_cast<wlr_seat_request_set_primary_selection_event*> (data);
-    wlr_seat_set_primary_selection(core->get_current_seat(), ev->source, ev->serial);
 }
 
 void input_manager::update_drag_icon()
@@ -146,20 +103,36 @@ void input_manager::create_seat()
 {
     cursor = std::make_unique<wf_cursor> ();
 
-    request_set_cursor.notify = handle_request_set_cursor;
-    wl_signal_add(&seat->events.request_set_cursor, &request_set_cursor);
+    request_set_cursor.set_callback([&] (void* data) {
+        auto ev = static_cast<wlr_seat_pointer_request_set_cursor_event*> (data);
+        core->input->cursor->set_cursor(ev);
+    });
+    request_set_cursor.connect(&seat->events.request_set_cursor);
 
-    request_start_drag.notify = handle_request_start_drag_cb;
-    wl_signal_add(&seat->events.request_start_drag, &request_start_drag);
+    request_start_drag.set_callback([&] (void *data) {
+        auto ev = static_cast<wlr_seat_request_start_drag_event*> (data);
+        validate_drag_request(ev);
+    });
+    request_start_drag.connect(&seat->events.request_start_drag);
 
-    start_drag.notify         = handle_start_drag_cb;
-    wl_signal_add(&seat->events.start_drag, &start_drag);
+    start_drag.set_callback([&] (void *data) {
+        auto d = static_cast<wlr_drag*> (data);
+        core->input->drag_icon = std::make_unique<wf_drag_icon> (d->icon);
+        core->emit_signal("drag-started", nullptr);
+    });
+    start_drag.connect(&seat->events.start_drag);
 
-    request_set_selection.notify = handle_request_set_selection_cb;
-    wl_signal_add(&seat->events.request_set_selection, &request_set_selection);
+    request_set_selection.set_callback([&] (void *data) {
+        auto ev = static_cast<wlr_seat_request_set_selection_event*> (data);
+        wlr_seat_set_selection(core->get_current_seat(), ev->source, ev->serial);
+    });
+    request_set_selection.connect(&seat->events.request_set_selection);
 
-    request_set_primary_selection.notify = handle_request_set_primary_selection_cb;
-    wl_signal_add(&seat->events.request_set_primary_selection, &request_set_primary_selection);
+    request_set_primary_selection.set_callback([&] (void *data) {
+        auto ev = static_cast<wlr_seat_request_set_primary_selection_event*> (data);
+        wlr_seat_set_primary_selection(core->get_current_seat(), ev->source, ev->serial);
+    });
+    request_set_primary_selection.connect(&seat->events.request_set_primary_selection);
 }
 
 namespace wf
@@ -221,44 +194,23 @@ void wf_input_device_internal::config_t::load(wayfire_config *config)
     touchpad_natural_scroll_enabled = section->get_option("natural_scroll", "0");
 }
 
-static void handle_device_destroy_cb(wl_listener *listener, void*)
-{
-    wf_input_device_internal::wlr_wrapper *wrapper = wl_container_of(listener, wrapper, destroy);
-    core->input->handle_input_destroyed(wrapper->self->get_wlr_handle());
-}
-
-static void handle_device_switch_cb(wl_listener *listener, void* data)
-{
-    wf_input_device_internal::wlr_wrapper *wrapper = wl_container_of(listener, wrapper, switched);
-    auto ev = (wlr_event_switch_toggle*) data;
-    wrapper->self->handle_switched(ev);
-}
-
 wf_input_device_internal::wf_input_device_internal(wlr_input_device *dev)
     : wf::input_device_t(dev)
 {
     update_options();
 
-    _wrapper.self = this;
-    _wrapper.destroy.notify = handle_device_destroy_cb;
-
-    wl_signal_add(&dev->events.destroy, &_wrapper.destroy);
+    on_destroy.set_callback([&] (void*) {
+        core->input->handle_input_destroyed(this->get_wlr_handle());
+    });
+    on_destroy.connect(&dev->events.destroy);
 
     if (dev->type == WLR_INPUT_DEVICE_SWITCH)
     {
-        _wrapper.switched.notify = handle_device_switch_cb;
-        wl_signal_add(&dev->switch_device->events.toggle, &_wrapper.switched);
-    } else
-    {
-        _wrapper.switched.notify = nullptr;
+        on_switch.set_callback([&] (void *data) {
+            this->handle_switched((wlr_event_switch_toggle*) data);
+        });
+        on_switch.connect(&dev->switch_device->events.toggle);
     }
-}
-
-wf_input_device_internal::~wf_input_device_internal()
-{
-    if (_wrapper.switched.notify)
-        wl_list_remove(&_wrapper.switched.link);
-    wl_list_remove(&_wrapper.destroy.link);
 }
 
 void wf_input_device_internal::handle_switched(wlr_event_switch_toggle *ev)

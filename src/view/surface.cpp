@@ -17,55 +17,6 @@ extern "C"
 #include "render-manager.hpp"
 #include "signal-definitions.hpp"
 
-void handle_surface_committed(wl_listener*, void *data)
-{
-    auto wlr_surf = (wlr_surface*) data;
-    auto surface = wf_surface_from_void(wlr_surf->data);
-    assert(surface);
-
-    surface->commit();
-}
-
-void handle_subsurface_created(wl_listener*, void *data)
-{
-    auto sub = static_cast<wlr_subsurface*> (data);
-    if (sub->surface->data)
-        return;
-
-    auto parent = wf_surface_from_void(sub->parent->data);
-    if (!parent)
-    {
-        log_error("subsurface created with invalid parent!");
-        return;
-    }
-
-    auto it = std::find_if(parent->surface_children.begin(),
-                           parent->surface_children.end(),
-                           [=] (wayfire_surface_t *surface)
-                            { return surface->surface == sub->surface; });
-
-    if (it == parent->surface_children.end())
-    {
-        auto surf = new wayfire_surface_t(parent);
-        surf->map(sub->surface);
-    } else
-    {
-        log_debug("adding same subsurface twice");
-    }
-}
-
-void handle_subsurface_destroyed(wl_listener*, void *data)
-{
-    auto wlr_surf = (wlr_subsurface*) data;
-    auto surface = wf_surface_from_void(wlr_surf->surface->data);
-
-    log_error ("subsurface destroyed %p", wlr_surf);
-
-    surface->destroyed = 1;
-    surface->unmap();
-    surface->dec_keep_count();
-}
-
 wayfire_surface_t::wayfire_surface_t(wayfire_surface_t* parent)
 {
     inc_keep_count();
@@ -77,9 +28,27 @@ wayfire_surface_t::wayfire_surface_t(wayfire_surface_t* parent)
         parent->surface_children.push_back(this);
     }
 
-    new_sub.notify   = handle_subsurface_created;
-    committed.notify = handle_surface_committed;
-    destroy.notify   = nullptr;
+    handle_new_subsurface = [&] (void* data)
+    {
+        auto sub = static_cast<wlr_subsurface*> (data);
+        if (sub->surface->data)
+            return;
+
+        auto it = std::find_if(surface_children.begin(), surface_children.end(),
+            [=] (wayfire_surface_t *surface) { return surface->surface == sub->surface; });
+
+        if (it == surface_children.end())
+        {
+            auto surf = new wayfire_surface_t(this);
+            surf->map(sub->surface);
+        } else
+        {
+            log_error("adding same subsurface twice!");
+        }
+    };
+
+    on_new_subsurface.set_callback(handle_new_subsurface);
+    on_commit.set_callback([&] (void*) { commit(); });
 }
 
 wayfire_surface_t::~wayfire_surface_t()
@@ -248,15 +217,15 @@ void wayfire_surface_t::map(wlr_surface *surface)
     /* force surface_send_enter() */
     set_output(output);
 
-    wl_signal_add(&surface->events.new_subsurface, &new_sub);
-    wl_signal_add(&surface->events.commit,         &committed);
+    on_new_subsurface.connect(&surface->events.new_subsurface);
+    on_commit.connect(&surface->events.commit);
 
     /* map by default if this is a subsurface, only toplevels/popups have map/unmap events */
     if (wlr_surface_is_subsurface(surface))
     {
         auto sub = wlr_subsurface_from_wlr_surface(surface);
-        destroy.notify = handle_subsurface_destroyed;
-        wl_signal_add(&sub->events.destroy, &destroy);
+        on_destroy.set_callback([&] (void*) { destroyed = 1; unmap(); dec_keep_count(); });
+        on_destroy.connect(&sub->events.destroy);
     }
 
     surface->data = this;
@@ -264,7 +233,7 @@ void wayfire_surface_t::map(wlr_surface *surface)
 
     wlr_subsurface *sub;
     wl_list_for_each(sub, &surface->subsurfaces, parent_link)
-        handle_subsurface_created(NULL, sub);
+        handle_new_subsurface(sub);
 
     if (core->uses_csd.count(surface))
         this->has_client_decoration = core->uses_csd[surface];
@@ -282,10 +251,9 @@ void wayfire_surface_t::unmap()
     this->surface = nullptr;
     emit_map_state_change(this);
 
-    wl_list_remove(&new_sub.link);
-    wl_list_remove(&committed.link);
-    if (destroy.notify)
-        wl_list_remove(&destroy.link);
+    on_new_subsurface.disconnect();
+    on_destroy.disconnect();
+    on_commit.disconnect();
 }
 
 wlr_buffer* wayfire_surface_t::get_buffer()
