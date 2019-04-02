@@ -454,7 +454,16 @@ namespace wf
             lo.destroy_wayfire_output();
         }
 
-        output_configuration_t last_attempted_configuration = {};
+        /* Get the current configuration of all outputs */
+        output_configuration_t get_current_configuration()
+        {
+            output_configuration_t configuration;
+            for (auto& entry : this->outputs)
+                configuration[entry.first] = entry.second->current_state;
+
+            return configuration;
+        }
+
         /** Load config from file, test and apply */
         void reconfigure_from_config()
         {
@@ -463,10 +472,9 @@ namespace wf
             for (auto& entry : this->outputs)
                 configuration[entry.first] = entry.second->load_state_from_config();
 
-            if (configuration == last_attempted_configuration)
+            if (configuration == get_current_configuration())
                 return;
 
-            last_attempted_configuration = configuration;
             if (test_configuration(configuration))
                 apply_configuration(configuration);
         }
@@ -578,16 +586,6 @@ namespace wf
         {
             int dummy_x, dummy_y;
             return get_output_coords_at(x, y, dummy_x, dummy_y);
-        }
-
-        /* Get the current configuration of all outputs */
-        output_configuration_t get_current_configuration()
-        {
-            output_configuration_t configuration;
-            for (auto& entry : this->outputs)
-                configuration[entry.first] = entry.second->current_state;
-
-            return configuration;
         }
 
         bool apply_configuration(const output_configuration_t& configuration, bool test_only)

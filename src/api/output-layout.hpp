@@ -25,7 +25,7 @@ namespace wf
          * if position is equal to the default_position defined below,
          * this means that it should be positioned automatically */
         static constexpr wf_point default_position = {0x3f3f3f3f, 0x3f3f3f3f};
-        wf_point position;
+        wf_point position = default_position;
 
         /** Only width, height and refresh fields are used. */
         wlr_output_mode mode;
