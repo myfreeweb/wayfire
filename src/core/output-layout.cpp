@@ -160,43 +160,27 @@ namespace wf
         /* A note: at this point, some views might already have been deleted */
     }
 
-    struct output_state_t
+    constexpr wf_point output_state_t::default_position;
+    bool output_state_t::operator == (const output_state_t& other) const
     {
-        /** Can be null, which means use default settings */
-        std::unique_ptr<wf_point> position;
-        /** Only width, height and refresh fields are used. */
-        wlr_output_mode mode;
+        bool eq = true;
 
-        wl_output_transform transform;
-        double scale;
+        eq &= position == other.position;
+        eq &= (mode.width == other.mode.width);
+        eq &= (mode.height == other.mode.height);
+        eq &= (mode.refresh == other.mode.refresh);
+        eq &= (transform == other.transform);
+        eq &= (scale == other.scale);
 
-        bool operator == (const output_state_t& other) const
-        {
-            bool eq = true;
-            if (position && other.position) {
-                eq &= (*position == *other.position);
-            } else {
-                /* equal only if both are default */
-                eq &= !(position || other.position);
-            }
-
-            eq &= (mode.width == other.mode.width);
-            eq &= (mode.height == other.mode.height);
-            eq &= (mode.refresh == other.mode.refresh);
-
-            eq &= (transform == other.transform);
-            eq &= (scale == other.scale);
-
-            return eq;
-        }
-    };
-
-    using output_configuration_t = std::map<wlr_output*, output_state_t>;
+        return eq;
+    }
 
     /** Represents a single output in the output layout */
     struct output_layout_output_t
     {
         wlr_output *handle;
+        output_state_t current_state;
+
         std::unique_ptr<wayfire_output> output;
         wl_listener_wrapper on_destroy;
         wf_option mode_opt, position_opt, scale_opt, transform_opt;
@@ -216,8 +200,6 @@ namespace wf
 
         wlr_output_mode select_default_mode()
         {
-            log_info("select default mode for output %s", handle->name);
-
             wlr_output_mode *mode;
             wl_list_for_each(mode, &handle->modes, link)
             {
@@ -225,15 +207,10 @@ namespace wf
                     return *mode;
             }
 
-            log_info("selected none");
-
             /* Couldn't find a preferred mode. Just return the last, which is
              * usually also the "largest" */
             wl_list_for_each_reverse(mode, &handle->modes, link)
-            {
-                log_info("first mode is %d,%d", mode->width, mode->height);
                 return *mode;
-            }
 
             /* Finally, if there isn't any mode (for ex. wayland backend),
              * try a default resolution */
@@ -248,16 +225,12 @@ namespace wf
         {
             output_state_t state;
 
-            state.position = nullptr;
+            state.position = output_state_t::default_position;
             if (position_opt->as_string() != default_value)
             {
                 auto value = parse_output_layout(position_opt->as_string());
-                log_info("parsing layout of %s, got %dx%d (%d)", handle->name, value.first.x, value.first.y, value.second);
                 if (value.second)
-                {
-                    state.position = std::make_unique<wf_point> ();
-                    *state.position = value.first;
-                }
+                    state.position = value.first;
             }
 
             /* Make sure we can use custom modes that are
@@ -295,10 +268,8 @@ namespace wf
             if (this->output)
                 return;
 
-            log_info("enabling output %s", handle->name);
             this->output = std::make_unique<wayfire_output> (handle, core->config);
             auto wo = output.get();
-            log_info("wayfireoutput: %p", wo);
 
             /* Focus the first output, but do not change the focus on subsequently
              * added outputs */
@@ -343,7 +314,7 @@ namespace wf
                 return;
             }
 
-            log_debug("adding custom mode %s", mode->name);
+            log_debug("output %s: adding custom mode %s", handle->name, mode->name);
             if (wlr_output_is_drm(handle))
                 wlr_drm_connector_add_mode(handle, mode);
         }
@@ -405,8 +376,7 @@ namespace wf
                 return;
 
             bool changed = apply_mode(state.mode);
-
-            if (handle->transform != state.transform)
+            if (current_state.transform != state.transform)
             {
                 changed = true;
                 wlr_output_set_transform(handle, state.transform);
@@ -418,6 +388,7 @@ namespace wf
                 wlr_output_set_scale(handle, state.scale);
             }
 
+            this->current_state = state;
             if (output && changed)
                 output->emit_signal("output-configuration-changed", nullptr);
         }
@@ -483,33 +454,29 @@ namespace wf
             lo.destroy_wayfire_output();
         }
 
-        output_configuration_t last_configuration = {};
+        output_configuration_t last_attempted_configuration = {};
         /** Load config from file, test and apply */
         void reconfigure_from_config()
         {
-            auto configuration = load_configuration_from_config();
-            if (configuration == last_configuration)
+            /* Load from config file */
+            output_configuration_t configuration;
+            for (auto& entry : this->outputs)
+                configuration[entry.first] = entry.second->load_state_from_config();
+
+            if (configuration == last_attempted_configuration)
                 return;
 
-            log_info("reconfigure outputs");
-            last_configuration = std::move(configuration);
-            if (test_configuration(last_configuration))
-                apply_config(last_configuration);
-        }
-
-        /** Load all output configuration from the config file */
-        output_configuration_t load_configuration_from_config()
-        {
-            output_configuration_t config;
-            for (auto& entry : this->outputs)
-                config[entry.first] = entry.second->load_state_from_config();
-
-            return config;
+            last_attempted_configuration = configuration;
+            if (test_configuration(configuration))
+                apply_configuration(configuration);
         }
 
         /** Check whether the given configuration can be applied */
         bool test_configuration(const output_configuration_t& config)
         {
+            if (config.size() != this->outputs.size())
+                return false;
+
             bool ok = true;
             for (auto& entry : config)
             {
@@ -524,24 +491,19 @@ namespace wf
             return ok;
         }
 
-        void apply_config(const output_configuration_t& config)
+        /** Apply the given configuration. Config MUST be a valid configuration */
+        void apply_configuration(const output_configuration_t& config)
         {
             for (auto& entry : config)
             {
-                if (this->outputs.count(entry.first) == 0)
-                {
-                    log_error("Error applying output config: probably a compositor bug");
-                    continue;
-                }
-
                 auto& handle = entry.first;
                 auto& state = entry.second;
                 auto& lo = this->outputs[handle];
 
                 wlr_output_layout_remove(output_layout, handle);
-                if (entry.second.position) {
+                if (entry.second.position != output_state_t::default_position) {
                     wlr_output_layout_add(output_layout, handle,
-                        state.position->x, state.position->y);
+                        state.position.x, state.position.y);
                 } else {
                     wlr_output_layout_add_auto(output_layout, handle);
                 }
@@ -617,17 +579,48 @@ namespace wf
             int dummy_x, dummy_y;
             return get_output_coords_at(x, y, dummy_x, dummy_y);
         }
+
+        /* Get the current configuration of all outputs */
+        output_configuration_t get_current_configuration()
+        {
+            output_configuration_t configuration;
+            for (auto& entry : this->outputs)
+                configuration[entry.first] = entry.second->current_state;
+
+            return configuration;
+        }
+
+        bool apply_configuration(const output_configuration_t& configuration, bool test_only)
+        {
+            bool ok = test_configuration(configuration);
+            if (ok && !test_only)
+                apply_configuration(configuration);
+
+            return ok;
+        }
     };
 
     /* Just pass to the PIMPL */
     output_layout_t::output_layout_t(wlr_backend *b) : pimpl(new impl(b)) {}
     output_layout_t::~output_layout_t() = default;
-    wlr_output_layout *output_layout_t::get_handle() { return pimpl->get_handle(); }
-    wayfire_output *output_layout_t::get_output_at(int x, int y) { return pimpl->get_output_at(x, y); }
-    wayfire_output *output_layout_t::get_output_coords_at(int x, int y, int& lx, int& ly) { return pimpl->get_output_coords_at(x, y, lx, ly); }
-    size_t output_layout_t::get_num_outputs() { return pimpl->get_num_outputs(); }
-    std::vector<wayfire_output*> output_layout_t::get_outputs() { return pimpl->get_outputs(); }
-    wayfire_output *output_layout_t::get_next_output(wayfire_output *output) { return pimpl->get_next_output(output); }
-    wayfire_output *output_layout_t::find_output(wlr_output *output) { return pimpl->find_output(output); }
-    wayfire_output *output_layout_t::find_output(std::string name) { return pimpl->find_output(name); }
+    wlr_output_layout *output_layout_t::get_handle()
+    { return pimpl->get_handle(); }
+    wayfire_output *output_layout_t::get_output_at(int x, int y)
+    { return pimpl->get_output_at(x, y); }
+    wayfire_output *output_layout_t::get_output_coords_at(int x, int y, int& lx, int& ly)
+    { return pimpl->get_output_coords_at(x, y, lx, ly); }
+    size_t output_layout_t::get_num_outputs()
+    { return pimpl->get_num_outputs(); }
+    std::vector<wayfire_output*> output_layout_t::get_outputs()
+    { return pimpl->get_outputs(); }
+    wayfire_output *output_layout_t::get_next_output(wayfire_output *output)
+    { return pimpl->get_next_output(output); }
+    wayfire_output *output_layout_t::find_output(wlr_output *output)
+    { return pimpl->find_output(output); }
+    wayfire_output *output_layout_t::find_output(std::string name)
+    { return pimpl->find_output(name); }
+    output_configuration_t output_layout_t::get_current_configuration()
+    { return pimpl->get_current_configuration(); }
+    bool output_layout_t::apply_configuration(const output_configuration_t& configuration, bool test_only)
+    { return pimpl->apply_configuration(configuration, test_only); }
 }
