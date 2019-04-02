@@ -4,6 +4,7 @@
 #include "util.hpp"
 #include "object.hpp"
 #include "input-device.hpp"
+#include "output-layout.hpp"
 
 #include <functional>
 #include <memory>
@@ -52,7 +53,6 @@ class wayfire_view_t;
 class wayfire_surface_t;
 
 using wayfire_view = nonstd::observer_ptr<wayfire_view_t>;
-using output_callback_proc = std::function<void(wayfire_output *)>;
 
 struct wf_server_decoration;
 
@@ -67,9 +67,7 @@ class wayfire_core : public wf_object_base
         wf::wl_listener_wrapper input_inhibit_activated;
         wf::wl_listener_wrapper input_inhibit_deactivated;
 
-        wayfire_output *active_output;
-        std::map<wlr_output*, wayfire_output*> outputs;
-
+        wayfire_output *active_output = nullptr;
         std::vector<std::unique_ptr<wayfire_view_t>> views;
 
         void configure(wayfire_config *config);
@@ -87,8 +85,8 @@ class wayfire_core : public wf_object_base
         wlr_backend *backend;
         wlr_egl *egl;
         wlr_renderer *renderer;
-        wlr_output_layout *output_layout;
         wlr_compositor *compositor;
+        std::unique_ptr<wf::output_layout_t> output_layout;
 
         struct
         {
@@ -156,25 +154,17 @@ class wayfire_core : public wf_object_base
         /* completely destroy a view */
         void erase_view(wayfire_view view);
 
-        /* brings the view to the top
-         * and also focuses its output */
+        /* brings the view to the top and also focuses its output */
         void focus_view(wayfire_view win, wlr_seat *seat);
+        /**
+         * Change the view's output to new_output. However, the view geometry
+         * isn't changed - the caller needs to make sure that the view doesn't
+         * become unreachable, for ex. by going out of the output bounds
+         */
         void move_view_to_output(wayfire_view v, wayfire_output *new_output);
 
-        void add_output(wlr_output *output);
-        wayfire_output *get_output(wlr_output *output);
-        wayfire_output *get_output(std::string name);
-
         void focus_output(wayfire_output *o);
-        void remove_output(wayfire_output *o);
-
         wayfire_output *get_active_output();
-        wayfire_output *get_next_output(wayfire_output *output);
-        wayfire_output *get_output_at(int x, int y);
-        size_t          get_num_outputs();
-
-        void for_each_output(output_callback_proc);
-
         /* Add a request to focus the given layer, or update an existing request.
          * Returns the UID of the request which was added/modified.
          *

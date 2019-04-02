@@ -233,9 +233,11 @@ wf_touch::wf_touch(wlr_cursor *cursor)
         double lx, ly;
         wlr_cursor_absolute_to_layout_coords(core->input->cursor->cursor,
             ev->device, ev->x, ev->y, &lx, &ly);
-        wlr_output_layout_closest_point(core->output_layout, NULL, lx, ly, &lx, &ly);
 
-        gesture_recognizer.register_touch(ev->time_msec, ev->touch_id, lx, ly);
+        int ix, iy;
+        core->output_layout->get_output_coords_at(lx, ly, ix, iy);
+        gesture_recognizer.register_touch(ev->time_msec, ev->touch_id, ix, iy);
+
         wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
     });
 
@@ -243,6 +245,7 @@ wf_touch::wf_touch(wlr_cursor *cursor)
     {
         auto ev = static_cast<wlr_event_touch_up*> (data);
         gesture_recognizer.unregister_touch(ev->time_msec, ev->touch_id);
+
         wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
     });
 
@@ -254,7 +257,9 @@ wf_touch::wf_touch(wlr_cursor *cursor)
         double lx, ly;
         wlr_cursor_absolute_to_layout_coords(core->input->cursor->cursor,
             ev->device, ev->x, ev->y, &lx, &ly);
-        wlr_output_layout_closest_point(core->output_layout, NULL, lx, ly, &lx, &ly);
+
+        int ix, iy;
+        core->output_layout->get_output_coords_at(lx, ly, ix, iy);
         touch->gesture_recognizer.update_touch(ev->time_msec, ev->touch_id, lx, ly);
         wlr_idle_notify_activity(core->protocols.idle, core->get_current_seat());
     });
@@ -329,7 +334,7 @@ void input_manager::handle_touch_down(uint32_t time, int32_t id, int32_t x, int3
     mod_binding_key = 0;
     ++our_touch->count_touch_down;
     if (our_touch->count_touch_down == 1)
-        core->focus_output(core->get_output_at(x, y));
+        core->focus_output(core->output_layout->get_output_at(x, y));
 
     auto wo = core->get_active_output();
     auto og = wo->get_layout_geometry();
@@ -384,7 +389,7 @@ void input_manager::handle_touch_motion(uint32_t time, int32_t id, int32_t x, in
 {
     if (active_grab)
     {
-        auto wo = core->get_output_at(x, y);
+        auto wo = core->output_layout->get_output_at(x, y);
         auto og = wo->get_layout_geometry();
         if (active_grab->callbacks.touch.motion)
             active_grab->callbacks.touch.motion(id, x - og.x, y - og.y);

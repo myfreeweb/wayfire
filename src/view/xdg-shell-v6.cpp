@@ -4,6 +4,7 @@
 #include "core.hpp"
 #include "output.hpp"
 #include "decorator.hpp"
+#include "output-layout.hpp"
 
 static void create_xdg6_popup(wlr_xdg_popup_v6* popup);
 
@@ -103,7 +104,7 @@ wayfire_xdg6_view::wayfire_xdg6_view(wlr_xdg_surface_v6 *s)
     });
     on_request_fullscreen.set_callback([&] (void* data) {
         auto ev = static_cast<wlr_xdg_toplevel_v6_set_fullscreen_event*> (data);
-        auto wo = core->get_output(ev->output);
+        auto wo = core->output_layout->find_output(ev->output);
         fullscreen_request(wo, ev->fullscreen);
     });
 

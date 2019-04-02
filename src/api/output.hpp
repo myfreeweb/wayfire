@@ -31,28 +31,8 @@ class wayfire_output : public wf_object_base
        plugin_manager *plugin;
        wayfire_view active_view, last_active_toplevel;
 
-       wf::wl_listener_wrapper on_handle_destroy;
        signal_callback_t view_disappeared_cb;
-
-       wf_option_callback config_mode_changed,
-                          config_transform_changed,
-                          config_position_changed,
-                          config_scale_changed;
-
-       wf_option mode_opt, scale_opt, transform_opt, position_opt;
-
-       void set_initial_mode();
-       void set_initial_scale();
-       void set_initial_transform();
-       void set_initial_position();
-
-       void set_position(std::string pos);
-       void refresh_custom_modes();
-       void add_custom_mode(std::string mode);
-
     public:
-       int id;
-       bool destroyed = false;
        wlr_output* handle;
        std::tuple<int, int> get_screen_size();
 
@@ -69,16 +49,6 @@ class wayfire_output : public wf_object_base
 
        /* geometry with respect to the output-layout */
        wf_geometry get_layout_geometry();
-
-       void set_transform(wl_output_transform new_transform);
-       wl_output_transform get_transform();
-
-       /* return true if mode switch has succeeded */
-       bool set_mode(std::string mode);
-       bool set_mode(uint32_t width, uint32_t height, uint32_t refresh_mHz);
-
-       void set_scale(double scale);
-       void set_position(wf_point p);
 
        /* makes sure that the pointer is inside the output's geometry */
        void ensure_pointer();

@@ -5,6 +5,7 @@
 #include <workspace-manager.hpp>
 #include <render-manager.hpp>
 #include <compositor-view.hpp>
+#include <output-layout.hpp>
 #include <debug.hpp>
 
 #include <linux/input.h>
@@ -568,11 +569,11 @@ class wayfire_move : public wayfire_plugin_t
         /* Destroys all mirror views created by this plugin */
         void delete_mirror_views(bool show_animation)
         {
-            core->for_each_output([=] (wayfire_output *wo)
+            for (auto& wo : core->output_layout->get_outputs())
             {
                 delete_mirror_view_from_output(wo,
                     show_animation, false);
-            });
+            }
         }
 
         signal_callback_t handle_mirror_view_unmapped = [=] (signal_data* data)
@@ -616,7 +617,7 @@ class wayfire_move : public wayfire_plugin_t
             /* The mouse isn't on our output anymore -> transfer ownership of
              * the move operation to the other output where the input currently is */
             GetTuple(global_x, global_y, get_global_input_coords());
-            auto target_output = core->get_output_at(global_x, global_y);
+            auto target_output = core->output_layout->get_output_at(global_x, global_y);
             if (target_output != output)
             {
                 /* The move plugin on the next output will create new mirror views */
@@ -628,7 +629,7 @@ class wayfire_move : public wayfire_plugin_t
             auto current_og = output->get_layout_geometry();
             auto current_geometry = view->get_bounding_box() + wf_point{current_og.x, current_og.y};
 
-            core->for_each_output([=] (wayfire_output *wo)
+            for (auto& wo : core->output_layout->get_outputs())
             {
                 if (wo == output) // skip the same output
                     return;
@@ -638,7 +639,7 @@ class wayfire_move : public wayfire_plugin_t
                 /* A view is visible on the other output as well */
                 if (og & current_geometry)
                     ensure_mirror_view(wo);
-            });
+            }
         }
 
         void handle_input_motion()

@@ -18,7 +18,7 @@ bool input_manager::handle_pointer_button(wlr_event_pointer_button *ev)
         if (cursor->count_pressed_buttons == 1)
         {
             GetTuple(gx, gy, core->get_cursor_position());
-            auto output = core->get_output_at(gx, gy);
+            auto output = core->output_layout->get_output_at(gx, gy);
             core->focus_output(output);
         }
 
@@ -247,7 +247,7 @@ wf_cursor::wf_cursor()
 {
     cursor = wlr_cursor_create();
 
-    wlr_cursor_attach_output_layout(cursor, core->output_layout);
+    wlr_cursor_attach_output_layout(cursor, core->output_layout->get_handle());
     wlr_cursor_map_to_output(cursor, NULL);
     wlr_cursor_warp(cursor, NULL, cursor->x, cursor->y);
 

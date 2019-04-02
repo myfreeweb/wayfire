@@ -280,7 +280,7 @@ wayfire_layer_shell_view::wayfire_layer_shell_view(wlr_layer_surface_v1 *lsurf)
 
     if (lsurf->output)
     {
-        auto wo = core->get_output(lsurf->output);
+        auto wo = core->output_layout->find_output(lsurf->output);
         set_output(wo);
     }
 

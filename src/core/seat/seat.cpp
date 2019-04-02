@@ -56,7 +56,7 @@ void wf_drag_icon::damage(const wlr_box& box)
     if (!is_mapped())
         return;
 
-    core->for_each_output([=] (wayfire_output *output)
+    for (auto& output : core->output_layout->get_outputs())
     {
         auto output_geometry = output->get_layout_geometry();
         if (output_geometry & box)
@@ -68,7 +68,7 @@ void wf_drag_icon::damage(const wlr_box& box)
             const auto& fb = output->render->get_target_framebuffer();
             output->render->damage(fb.damage_box_from_geometry_box(local));
         }
-    });
+    }
 }
 
 void input_manager::validate_drag_request(wlr_seat_request_start_drag_event *ev)

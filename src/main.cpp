@@ -26,8 +26,6 @@ extern "C"
 
 wf_runtime_config runtime_config;
 
-static wf::wl_listener_wrapper on_output_created;
-
 #define INOT_BUF_SIZE (1024 * sizeof(inotify_event))
 char buf[INOT_BUF_SIZE];
 
@@ -214,12 +212,6 @@ int main(int argc, char *argv[])
     setenv("_WAYLAND_DISPLAY", server_name, 1);
 
     core->wayland_display = server_name;
-
-    on_output_created.set_callback([&] (void *data) {
-        core->add_output((wlr_output*) data);
-    });
-    on_output_created.connect(&core->backend->events.new_output);
-
     if (!wlr_backend_start(core->backend))
     {
         log_error("failed to initialize backend, exiting");

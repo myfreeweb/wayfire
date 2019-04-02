@@ -22,6 +22,8 @@ extern "C"
 
 struct wf_output_damage
 {
+    wf::wl_listener_wrapper on_damage_destroy;
+
     wf_region frame_damage;
     wlr_output *output;
     wlr_output_damage *damage_manager;
@@ -30,6 +32,9 @@ struct wf_output_damage
     {
         this->output = output;
         damage_manager = wlr_output_damage_create(output);
+
+        on_damage_destroy.set_callback([&] (void *) { damage_manager = nullptr; });
+        on_damage_destroy.connect(&damage_manager->events.destroy);
     }
 
     void add()
@@ -44,20 +49,29 @@ struct wf_output_damage
         frame_damage |= box;
 
         auto sbox = box;
-        wlr_output_damage_add_box(damage_manager, &sbox);
+        if (damage_manager)
+            wlr_output_damage_add_box(damage_manager, &sbox);
+
         schedule_repaint();
     }
 
     void add(const wf_region& region)
     {
         frame_damage |= region;
-        wlr_output_damage_add(damage_manager,
-            const_cast<wf_region&> (region).to_pixman());
+        if (damage_manager)
+        {
+            wlr_output_damage_add(damage_manager,
+                const_cast<wf_region&> (region).to_pixman());
+        }
+
         schedule_repaint();
     }
 
     bool make_current(wf_region& out_damage, bool& need_swap)
     {
+        if (!damage_manager)
+            return false;
+
         auto r = wlr_output_damage_make_current(damage_manager, &need_swap,
             out_damage.to_pixman());
         if (r)
@@ -77,6 +91,9 @@ struct wf_output_damage
 
     void swap_buffers(timespec *when, wf_region& swap_damage)
     {
+        if (!damage_manager)
+            return;
+
         int w, h;
         wlr_output_transformed_resolution(output, &w, &h);
 
@@ -138,17 +155,11 @@ render_manager::~render_manager()
 
 wf_region render_manager::get_scheduled_damage()
 {
-    if (!output->destroyed)
-        return output_damage->frame_damage;
-
-    return wf_region{};
+    return output_damage->frame_damage;
 }
 
 void render_manager::damage_whole()
 {
-    if (output->destroyed)
-        return;
-
     GetTuple(vw, vh, output->workspace->get_workspace_grid_size());
     GetTuple(vx, vy, output->workspace->get_current_workspace());
 
@@ -166,14 +177,12 @@ void render_manager::damage_whole_idle()
 
 void render_manager::damage(const wlr_box& box)
 {
-    if (!output->destroyed)
-        output_damage->add(box);
+    output_damage->add(box);
 }
 
 void render_manager::damage(const wf_region& region)
 {
-    if (!output->destroyed)
-        output_damage->add(region);
+    output_damage->add(region);
 }
 
 wlr_box render_manager::get_damage_box() const
@@ -199,8 +208,9 @@ wf_framebuffer render_manager::get_target_framebuffer() const
 {
     wf_framebuffer fb;
     fb.geometry = output->get_relative_geometry();
-    fb.wl_transform = output->get_transform();
-    fb.transform = get_output_matrix_from_transform(output->get_transform());
+    fb.wl_transform = output->handle->transform;
+    fb.transform = get_output_matrix_from_transform(
+        (wl_output_transform)fb.wl_transform);
     fb.scale = output->handle->scale;
 
     fb.fb = fb.tex = 0;

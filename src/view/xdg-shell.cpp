@@ -3,6 +3,7 @@
 #include "output.hpp"
 #include "decorator.hpp"
 #include "xdg-shell.hpp"
+#include "output-layout.hpp"
 
 /* TODO: Figure out a way to animate this */
 wayfire_xdg_popup::wayfire_xdg_popup(wlr_xdg_popup *popup)
@@ -108,7 +109,7 @@ wayfire_xdg_view::wayfire_xdg_view(wlr_xdg_surface *s)
     });
     on_request_fullscreen.set_callback([&] (void* data) {
         auto ev = static_cast<wlr_xdg_toplevel_set_fullscreen_event*> (data);
-        auto wo = core->get_output(ev->output);
+        auto wo = core->output_layout->find_output(ev->output);
         fullscreen_request(wo, ev->fullscreen);
     });
 

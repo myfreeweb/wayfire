@@ -94,6 +94,7 @@ class input_manager
         std::vector<std::function<void()>> match_keys(uint32_t mods, uint32_t key, uint32_t mod_binding_key = 0);
 
         wayfire_view keyboard_focus;
+        signal_callback_t surface_map_state_changed;
 
     public:
 
@@ -113,7 +114,6 @@ class input_manager
         std::unique_ptr<wf_cursor> cursor;
 
         wayfire_surface_t* cursor_focus = nullptr, *touch_focus = nullptr;
-        signal_callback_t surface_map_state_changed;
 
         std::unique_ptr<wf_touch> our_touch;
         std::unique_ptr<wf_drag_icon> drag_icon;

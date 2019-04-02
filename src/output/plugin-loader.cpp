@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 
 #include "plugin-loader.hpp"
+#include "output-layout.hpp"
 #include "output.hpp"
 #include "../core/wm.hpp"
 #include "core.hpp"
@@ -89,7 +90,7 @@ void plugin_manager::destroy_plugin(wayfire_plugin& p)
 
     /* we load the same plugins for each output, so we must dlclose() the handle
      * only when we remove the last output */
-    if (core->get_num_outputs() < 1)
+    if (core->output_layout->get_num_outputs() < 1)
     {
         if (p->dynamic)
             dlclose(p->handle);

@@ -76,7 +76,7 @@ struct _surface_map_state_changed_signal : public signal_data
     wayfire_surface_t *surface;
 };
 
-/* Part 2: Signals from wayfire_core */
+/* Part 2: Signals from wf::output_layout_t */
 struct _output_signal : public signal_data
 {
     wayfire_output *output;

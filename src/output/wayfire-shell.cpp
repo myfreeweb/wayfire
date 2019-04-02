@@ -373,7 +373,7 @@ static void zwf_shell_manager_get_wm_surface(struct wl_client *client,
     uint32_t role, struct wl_resource *output, uint32_t id)
 {
     wayfire_output *wo = output ?
-        core->get_output(wlr_output_from_resource(output)) : nullptr;
+        core->output_layout->find_output(wlr_output_from_resource(output)) : nullptr;
 
     auto view = wl_surface_to_wayfire_view(surface);
 
@@ -481,7 +481,7 @@ void zwf_shell_manager_get_wf_output(struct wl_client *client,
                                      uint32_t id)
 {
     auto wlr_out = (wlr_output*) wl_resource_get_user_data(output);
-    auto wo = core->get_output(wlr_out);
+    auto wo = core->output_layout->find_output(wlr_out);
 
     auto wfo = wl_resource_create(client, &zwf_output_v1_interface, 1, id);
     wl_resource_set_implementation(wfo, &zwf_output_v1_implementation, wo, destroy_zwf_output);
@@ -563,7 +563,7 @@ wayfire_shell* wayfire_shell_create(wl_display *display)
         wayfire_shell_handle_output_destroyed( get_signaled_output(data));
     };
 
-    core->connect_signal("output-added", &shell.output_added);
-    core->connect_signal("output-removed", &shell.output_removed);
+    core->output_layout->connect_signal("output-added", &shell.output_added);
+    core->output_layout->connect_signal("output-removed", &shell.output_removed);
     return &shell;
 }

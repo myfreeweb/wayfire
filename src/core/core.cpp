@@ -91,12 +91,7 @@ void wayfire_core::init(wayfire_config *conf)
     protocols.data_control = wlr_data_control_manager_v1_create(display);
     wlr_renderer_init_wl_display(renderer, display);
 
-    output_layout = wlr_output_layout_create();
-    output_layout_changed.set_callback([&] (void *) {
-        for_each_output([&] (wayfire_output *wo) {
-            wo->emit_signal("output-resized", nullptr); }); });
-    output_layout_changed.connect(&output_layout->events.change);
-
+    output_layout = std::make_unique<wf::output_layout_t> (backend);
     core->compositor = wlr_compositor_create(display, wlr_backend_get_renderer(backend));
     init_desktop_apis();
     input = new input_manager();
@@ -107,10 +102,11 @@ void wayfire_core::init(wayfire_config *conf)
     protocols.gamma_v1 = wlr_gamma_control_manager_v1_create(display);
     protocols.linux_dmabuf = wlr_linux_dmabuf_v1_create(display, renderer);
     protocols.export_dmabuf = wlr_export_dmabuf_manager_v1_create(display);
-    protocols.output_manager = wlr_xdg_output_manager_v1_create(display, output_layout);
+    protocols.output_manager = wlr_xdg_output_manager_v1_create(display,
+        output_layout->get_handle());
 
     /* input-inhibit setup */
-    protocols.input_inhibit = wlr_input_inhibit_manager_create(display);
+    protocols.input_inhibit = create_input_inhibit();
     input_inhibit_activated.set_callback([&] (void*) {
         input->set_exclusive_focus(protocols.input_inhibit->active_client); });
     input_inhibit_activated.connect(&protocols.input_inhibit->events.activate);
@@ -155,8 +151,8 @@ void wayfire_core::wake()
 
     if (times_wake > 0)
     {
-        for_each_output([] (wayfire_output *output)
-                        { output->emit_signal("wake", nullptr); });
+        for (auto& wo : output_layout->get_outputs())
+            wo->emit_signal("wake", nullptr);
     }
 
     ++times_wake;
@@ -164,8 +160,8 @@ void wayfire_core::wake()
 
 void wayfire_core::sleep()
 {
-    for_each_output([] (wayfire_output *output)
-            { output->emit_signal("sleep", nullptr); });
+    for (auto& wo : output_layout->get_outputs())
+        wo->emit_signal("sleep", nullptr);
 }
 
 wlr_seat* wayfire_core::get_current_seat()
@@ -232,91 +228,6 @@ wayfire_core::get_input_devices()
     return list;
 }
 
-static int _last_output_id = 0;
-void wayfire_core::add_output(wlr_output *output)
-{
-    log_info("add new output: %s", output->name);
-    if (outputs.find(output) != outputs.end())
-    {
-        log_info("old output");
-        return;
-    }
-
-    wayfire_output *wo = outputs[output] = new wayfire_output(output, config);
-    wo->id = _last_output_id++;
-
-    /* Focus the first output, but do not change the focus on subsequently
-     * added outputs */
-    if (outputs.size() == 1)
-        focus_output(wo);
-
-    wo->connect_signal("_surface_mapped", &input->surface_map_state_changed);
-    wo->connect_signal("_surface_unmapped", &input->surface_map_state_changed);
-
-    output_added_signal data;
-    data.output = wo;
-    emit_signal("output-added", &data);
-
-    if (input->exclusive_client)
-        inhibit_output(wo);
-}
-
-void wayfire_core::remove_output(wayfire_output *output)
-{
-    log_info("removing output: %s", output->handle->name);
-
-    output->destroyed = true;
-    outputs.erase(output->handle);
-
-    output_removed_signal data;
-    data.output = output;
-    emit_signal("output-removed", &data);
-
-    /* we have no outputs, simply quit */
-    if (outputs.empty())
-        std::exit(0);
-
-    if (output == active_output)
-        focus_output(outputs.begin()->second);
-
-    /* first move each desktop view(e.g windows) to another output */
-    std::vector<wayfire_view> views;
-    output->workspace->for_each_view_reverse([&views] (wayfire_view view) { views.push_back(view); },
-        WF_MIDDLE_LAYERS | WF_LAYER_MINIMIZED);
-
-    for (auto& view : views)
-        output->detach_view(view);
-
-    for (auto& view : views)
-    {
-        active_output->attach_view(view);
-        active_output->focus_view(view);
-
-        if (view->maximized)
-            view->maximize_request(true);
-
-        if (view->fullscreen)
-            view->fullscreen_request(active_output, true);
-    }
-
-    /* just remove all other views - backgrounds, panels, etc.
-     * desktop views have been removed by the previous cycle */
-    output->workspace->for_each_view([] (wayfire_view view)
-    {
-        view->close();
-        view->set_output(nullptr);
-    }, WF_ALL_LAYERS);
-    /* A note: at this point, some views might already have been deleted */
-
-    /* FIXME: this is a hack, but depends on #46 */
-    input->surface_map_state_changed(NULL);
-
-    if (input->exclusive_client)
-        uninhibit_output(output);
-
-    delete output;
-}
-
 void wayfire_core::refocus_active_output_active_view()
 {
     if (!active_output)
@@ -346,6 +257,7 @@ void wayfire_core::focus_output(wayfire_output *wo)
     }
 
     active_output = wo;
+    log_debug("focusing %p", wo);
     if (wo)
         log_debug("focus output: %s", wo->handle->name);
 
@@ -372,69 +284,9 @@ void wayfire_core::focus_output(wayfire_output *wo)
     }
 }
 
-wayfire_output* wayfire_core::get_output(wlr_output *handle)
-{
-    auto it = outputs.find(handle);
-    if (it != outputs.end()) {
-        return it->second;
-    } else {
-        return nullptr;
-    }
-}
-
-wayfire_output* wayfire_core::get_output(std::string name)
-{
-    for (const auto& wo : outputs)
-        if (wo.first->name == name)
-            return wo.second;
-
-    return nullptr;
-}
-
 wayfire_output* wayfire_core::get_active_output()
 {
     return active_output;
-}
-
-wayfire_output* wayfire_core::get_output_at(int x, int y)
-{
-    wayfire_output *target = nullptr;
-    for_each_output([&] (wayfire_output *output)
-    {
-        if ((output->get_layout_geometry() & wf_point{x, y}) &&
-                target == nullptr)
-        {
-            target = output;
-        }
-    });
-
-    return target;
-}
-
-wayfire_output* wayfire_core::get_next_output(wayfire_output *output)
-{
-    if (outputs.empty())
-        return output;
-    auto id = output->handle;
-    auto it = outputs.find(id);
-    ++it;
-
-    if (it == outputs.end()) {
-        return outputs.begin()->second;
-    } else {
-        return it->second;
-    }
-}
-
-size_t wayfire_core::get_num_outputs()
-{
-    return outputs.size();
-}
-
-void wayfire_core::for_each_output(output_callback_proc call)
-{
-    for (auto o : outputs)
-        call(o.second);
 }
 
 int wayfire_core::focus_layer(uint32_t layer, int32_t request_uid_hint)

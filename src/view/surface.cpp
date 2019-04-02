@@ -201,12 +201,13 @@ wf_geometry wayfire_surface_t::get_output_geometry()
 void emit_map_state_change(wayfire_surface_t *surface)
 {
     std::string state = surface->is_mapped() ? "_surface_mapped" : "_surface_unmapped";
-    wayfire_output *wo = surface->get_output();
-    if (!wo) return;
 
     _surface_map_state_changed_signal data;
     data.surface = surface;
-    wo->emit_signal(state, &data);
+    if (surface->get_output())
+        surface->get_output()->emit_signal(state, &data);
+
+    core->emit_signal(state, &data);
 }
 
 void wayfire_surface_t::map(wlr_surface *surface)

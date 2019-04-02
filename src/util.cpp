@@ -9,6 +9,16 @@ extern "C"
 }
 
 /* Geometry helpers */
+bool operator == (const wf_point& a, const wf_point& b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+bool operator != (const wf_point& a, const wf_point& b)
+{
+    return !(a == b);
+}
+
 bool operator == (const wf_geometry& a, const wf_geometry& b)
 {
     return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;

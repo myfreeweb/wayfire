@@ -27,6 +27,9 @@ struct wf_point
 
 using wf_geometry = wlr_box;
 
+bool operator == (const wf_point& a, const wf_point& b);
+bool operator != (const wf_point& a, const wf_point& b);
+
 bool operator == (const wf_geometry& a, const wf_geometry& b);
 bool operator != (const wf_geometry& a, const wf_geometry& b);
 

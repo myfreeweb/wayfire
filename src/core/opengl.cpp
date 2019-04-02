@@ -447,7 +447,7 @@ glm::mat4 get_output_matrix_from_transform(wl_output_transform transform)
 
 glm::mat4 output_get_projection(wayfire_output *output)
 {
-    auto rotation = get_output_matrix_from_transform(output->get_transform());
+    auto rotation = get_output_matrix_from_transform(output->handle->transform);
 
     int w, h;
     wlr_output_effective_resolution(output->handle, &w, &h);

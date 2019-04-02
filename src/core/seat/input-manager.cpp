@@ -67,7 +67,7 @@ void input_manager::handle_new_input(wlr_input_device *dev)
     auto mapped_output = section->get_option("output",
         nonull(dev->output_name))->as_string();
 
-    auto wo = core->get_output(mapped_output);
+    auto wo = core->output_layout->find_output(mapped_output);
     if (wo)
         wlr_cursor_map_input_to_output(cursor->cursor, dev, wo->handle);
 
@@ -132,6 +132,8 @@ input_manager::input_manager()
                 handle_touch_motion(get_current_time(), f.first, f.second.sx, f.second.sy);
         }
     };
+    core->connect_signal("_surface_mapped", &surface_map_state_changed);
+    core->connect_signal("_surface_unmapped", &surface_map_state_changed);
 
     config_updated = [=] (signal_data *)
     {
@@ -243,7 +245,7 @@ bool input_manager::can_focus_surface(wayfire_surface_t *surface)
 wayfire_surface_t* input_manager::input_surface_at(int x, int y,
     int& lx, int& ly)
 {
-    auto output = core->get_output_at(x, y);
+    auto output = core->output_layout->get_output_coords_at(x, y, x, y);
     /* If the output at these coordinates was just destroyed or some other edge case */
     if (!output)
         return nullptr;
@@ -269,14 +271,13 @@ wayfire_surface_t* input_manager::input_surface_at(int x, int y,
 void input_manager::set_exclusive_focus(wl_client *client)
 {
     exclusive_client = client;
-
-    core->for_each_output([&client] (wayfire_output *output)
+    for (auto& wo : core->output_layout->get_outputs())
     {
         if (client)
-            inhibit_output(output);
+            inhibit_output(wo);
         else
-            uninhibit_output(output);
-    });
+            uninhibit_output(wo);
+    }
 
     /* We no longer have an exclusively focused client, so we should restore
      * focus to the topmost view */

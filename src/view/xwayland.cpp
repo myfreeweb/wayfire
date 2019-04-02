@@ -3,6 +3,7 @@
 #include "core.hpp"
 #include "output.hpp"
 #include "workspace-manager.hpp"
+#include "output-layout.hpp"
 
 extern "C"
 {
@@ -404,13 +405,13 @@ void wayfire_unmanaged_xwayland_view::map(wlr_surface *surface)
      * an incorrect output. However, no matter how we calculate the real
      * output, we just can't be 100% compatible because in X all windows are
      * positioned in a global coordinate space */
-    auto wo = core->get_output_at(xw->x + surface->current.width / 2, xw->y + surface->current.height / 2);
+    auto wo = core->output_layout->get_output_at(xw->x + surface->current.width / 2, xw->y + surface->current.height / 2);
 
     if (!wo)
     {
         /* if surface center is outside of anything, try to check the output where the pointer is */
         GetTuple(cx, cy, core->get_cursor_position());
-        wo = core->get_output_at(cx, cy);
+        wo = core->output_layout->get_output_at(cx, cy);
     }
 
     if (!wo)

@@ -1,11 +1,43 @@
 #include <map>
 
+extern "C"
+{
+#include <wlr/types/wlr_input_inhibitor.h>
+}
+
+#include "signal-definitions.hpp"
 #include "input-inhibit.hpp"
 #include "output.hpp"
 #include "plugin.hpp"
+#include "core.hpp"
+#include "input-manager.hpp"
 
 static const std::string iface_name = "_input_inhibitor";
-std::map<wayfire_output*, wayfire_grab_interface> iface_map;
+static std::map<wayfire_output*, wayfire_grab_interface> iface_map;
+
+/* output added/removed */
+static signal_callback_t on_output_changed = [] (signal_data *data)
+{
+    auto wo = get_signaled_output(data);
+
+    /* if the output was inhibited, then it is being removed */
+    if (is_output_inhibited(wo))
+    {
+        uninhibit_output(wo);
+    }
+    else if (core->input->exclusive_client)
+    {
+        inhibit_output(wo);
+    }
+};
+
+wlr_input_inhibit_manager* create_input_inhibit()
+{
+    core->connect_signal("output-added", &on_output_changed);
+    core->connect_signal("output-removed", &on_output_changed);
+
+    return wlr_input_inhibit_manager_create(core->display);
+}
 
 void inhibit_output(wayfire_output *output)
 {
