@@ -10,7 +10,6 @@ expo          = shared_module('expo',          'expo.cpp',          include_dire
 switcher      = shared_module('switcher',      'switcher.cpp',      include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
 fast_switcher = shared_module('fast-switcher', 'fast-switcher.cpp', include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
 oswitch       = shared_module('oswitch',       'oswitch.cpp',       include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
-#rotator       = shared_module('rotator',       'rotator.cpp',       include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
 window_rules  = shared_module('window-rules',  'window-rules.cpp',  include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
 place         = shared_module('place',         'place.cpp',         include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
 invert        = shared_module('invert',        'invert.cpp',        include_directories: [wayfire_api_inc, wayfire_conf_inc], dependencies: [wlroots, pixman, wfconfig], install: true, install_dir: 'lib/wayfire/')
