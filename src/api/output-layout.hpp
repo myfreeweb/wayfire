@@ -18,9 +18,23 @@ extern "C"
 class wayfire_output;
 namespace wf
 {
+    /** Represents the source of pixels for this output */
+    enum output_image_source_t
+    {
+        /** Output renders itself */
+        OUTPUT_IMAGE_SOURCE_SELF,
+        /** Output is turned off */
+        OUTPUT_IMAGE_SOURCE_NONE,
+    };
+
     /** Represents the current state of an output as the output layout sees it */
     struct output_state_t
     {
+        /* The current source of the output.
+         *
+         * If source is none, then the values below don't have a meaning */
+        output_image_source_t source = OUTPUT_IMAGE_SOURCE_SELF;
+
         /** the position of the output in the compositor space.
          * if position is equal to the default_position defined below,
          * this means that it should be positioned automatically */

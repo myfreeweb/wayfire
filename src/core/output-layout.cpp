@@ -163,8 +163,12 @@ namespace wf
     constexpr wf_point output_state_t::default_position;
     bool output_state_t::operator == (const output_state_t& other) const
     {
+        if (source == OUTPUT_IMAGE_SOURCE_NONE)
+            return other.source == OUTPUT_IMAGE_SOURCE_NONE;
+
         bool eq = true;
 
+        eq &= source == other.source;
         eq &= position == other.position;
         eq &= (mode.width == other.mode.width);
         eq &= (mode.height == other.mode.height);
@@ -221,6 +225,27 @@ namespace wf
             };
         }
 
+        /* Returns true if mode setting for the given output can succeed */
+        bool is_mode_supported(wlr_output_mode query)
+        {
+            /* DRM doesn't support setting a custom mode, so any supported mode
+             * must be found in the mode list */
+            if (wlr_output_is_drm(handle))
+            {
+                wlr_output_mode *mode;
+                wl_list_for_each(mode, &handle->modes, link)
+                {
+                    if (mode->width == query.width && mode->height == query.height)
+                        return true;
+                }
+
+                return false;
+            }
+
+            /* X11 and Wayland backends support setting custom modes */
+            return true;
+        }
+
         output_state_t load_state_from_config()
         {
             output_state_t state;
@@ -237,18 +262,34 @@ namespace wf
              * specified in the config */
             refresh_custom_modes();
 
-            state.mode.width = -1;
-            if (mode_opt->as_string() != default_value)
+            if (mode_opt->as_string() == "off")
             {
-                auto value = parse_output_mode(mode_opt->as_string());
-                if (value.second)
-                    state.mode = value.first;
+                state.source = OUTPUT_IMAGE_SOURCE_NONE;
+                return state;
             }
-
-            if (state.mode.width < 0)
+            else
             {
+                state.source = OUTPUT_IMAGE_SOURCE_SELF;
+                state.mode.width = -1;
+                if (mode_opt->as_string() != default_value &&
+                    mode_opt->as_string() != "auto")
+                {
+                    auto value = parse_output_mode(mode_opt->as_string());
+                    if (value.second)
+                    {
+                        if (is_mode_supported(value.first)) {
+                            state.mode = value.first;
+                        } else {
+                            log_error("Output mode %s for output %s is not "
+                                " supported, try adding a custom mode.",
+                                mode_opt->as_string().c_str(), handle->name);
+                        }
+                    }
+                }
+
                 /* Nothing usable in config, try to pick a default mode */
-                state.mode = select_default_mode();
+                if (state.mode.width < 0)
+                    state.mode = select_default_mode();
             }
 
             state.scale = scale_opt->as_double();
@@ -263,7 +304,7 @@ namespace wf
             return state;
         }
 
-        void create_wayfire_output()
+        void ensure_wayfire_output()
         {
             if (this->output)
                 return;
@@ -333,8 +374,12 @@ namespace wf
         /** Check whether the given state can be applied */
         bool test_state(const output_state_t& state)
         {
-            /* TODO */
-            return true;
+            if (state.source == OUTPUT_IMAGE_SOURCE_NONE)
+                return true;
+
+            /* XXX: are there more things to check? */
+            refresh_custom_modes();
+            return is_mode_supported(state.mode);
         }
 
         /** Change the output mode */
@@ -375,8 +420,17 @@ namespace wf
             if (!test_state(state))
                 return;
 
+            this->current_state = state;
+            if (state.source == OUTPUT_IMAGE_SOURCE_NONE) {
+                wlr_output_enable(handle, false);
+                destroy_wayfire_output();
+                return;
+            } else {
+                wlr_output_enable(handle, true);
+            }
+
             bool changed = apply_mode(state.mode);
-            if (current_state.transform != state.transform)
+            if (handle->transform != state.transform)
             {
                 changed = true;
                 wlr_output_set_transform(handle, state.transform);
@@ -388,7 +442,7 @@ namespace wf
                 wlr_output_set_scale(handle, state.scale);
             }
 
-            this->current_state = state;
+            ensure_wayfire_output();
             if (output && changed)
                 output->emit_signal("output-configuration-changed", nullptr);
         }
@@ -429,29 +483,18 @@ namespace wf
             outputs[output] = std::unique_ptr<output_layout_output_t>(lo);
             lo->on_destroy.set_callback([output, this] (void*) { remove_output(output); });
 
-            attach_output(*lo);
             reconfigure_from_config();
         }
 
         void remove_output(wlr_output *output)
         {
             log_info("remove output: %s", output->name);
-            detach_output(*outputs[output]);
+            outputs[output]->destroy_wayfire_output();
             outputs.erase(output);
 
             /* we have no outputs, simply quit */
             if (outputs.empty())
                 std::exit(0);
-        }
-
-        void attach_output(output_layout_output_t& lo)
-        {
-            lo.create_wayfire_output();
-        }
-
-        void detach_output(output_layout_output_t& lo)
-        {
-            lo.destroy_wayfire_output();
         }
 
         /* Get the current configuration of all outputs */
@@ -509,11 +552,14 @@ namespace wf
                 auto& lo = this->outputs[handle];
 
                 wlr_output_layout_remove(output_layout, handle);
-                if (entry.second.position != output_state_t::default_position) {
-                    wlr_output_layout_add(output_layout, handle,
-                        state.position.x, state.position.y);
-                } else {
-                    wlr_output_layout_add_auto(output_layout, handle);
+                if (state.source == OUTPUT_IMAGE_SOURCE_SELF)
+                {
+                    if (entry.second.position != output_state_t::default_position) {
+                        wlr_output_layout_add(output_layout, handle,
+                            state.position.x, state.position.y);
+                    } else {
+                        wlr_output_layout_add_auto(output_layout, handle);
+                    }
                 }
 
                 lo->apply_state(state);
@@ -549,7 +595,10 @@ namespace wf
         {
             std::vector<wayfire_output*> result;
             for (auto& entry : outputs)
-                result.push_back(entry.second->output.get());
+            {
+                if (entry.second->current_state.source == OUTPUT_IMAGE_SOURCE_SELF)
+                    result.push_back(entry.second->output.get());
+            }
 
             return result;
         }
@@ -557,25 +606,22 @@ namespace wf
         wayfire_output *get_next_output(wayfire_output *output)
         {
             auto os = get_outputs();
+            if (os.empty())
+                return nullptr;
 
-            log_info("get next output request");
-            for(auto& wo : os)
-                log_info("got %p", wo);
-
-            size_t i = 0;
-            for (; i < os.size() && os[i] != output; i++);
-
-            if (i + 1 == os.size())
+            auto it = std::find(os.begin(), os.end(), output);
+            if (it == os.end()) {
                 return os.empty() ? nullptr : os[0];
-
-            return os[i + 1];
+            } else {
+                ++it;
+                return *it;
+            }
         }
 
         wayfire_output *get_output_coords_at(int x, int y, int& rx, int& ry)
         {
             double lx = x, ly = y;
             wlr_output_layout_closest_point(output_layout, NULL, lx, ly, &lx, &ly);
-
             auto handle = wlr_output_layout_output_at(output_layout, lx, ly);
             assert(handle);
 
