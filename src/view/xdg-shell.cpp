@@ -187,7 +187,7 @@ void wayfire_xdg_view::get_child_offset(int &x, int &y)
 
 wf_geometry wayfire_xdg_view::get_wm_geometry()
 {
-    if (!xdg_surface)
+    if (!is_mapped())
         return get_untransformed_bounding_box();
 
     auto opos = get_output_position();
