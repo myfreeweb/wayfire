@@ -518,6 +518,8 @@ namespace wf
 
                 lo->apply_state(state);
             }
+
+            core->output_layout->emit_signal("configuration-updated", nullptr);
         }
 
         /* Public API functions */
