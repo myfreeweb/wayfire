@@ -428,9 +428,8 @@ namespace wf
 
     void wl_idle_call::execute()
     {
+        source = nullptr;
         if (call)
             call();
-
-        source = nullptr;
     }
 }
