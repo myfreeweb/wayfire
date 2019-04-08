@@ -22,9 +22,11 @@ namespace wf
     enum output_image_source_t
     {
         /** Output renders itself */
-        OUTPUT_IMAGE_SOURCE_SELF,
+        OUTPUT_IMAGE_SOURCE_SELF = 0x1,
         /** Output is turned off */
-        OUTPUT_IMAGE_SOURCE_NONE,
+        OUTPUT_IMAGE_SOURCE_NONE = 0x2,
+        /** Output is in DPMS state */
+        OUTPUT_IMAGE_SOURCE_DPMS = 0x3,
     };
 
     /** Represents the current state of an output as the output layout sees it */

@@ -421,11 +421,17 @@ namespace wf
                 return;
 
             this->current_state = state;
-            if (state.source == OUTPUT_IMAGE_SOURCE_NONE) {
+            if (state.source & OUTPUT_IMAGE_SOURCE_NONE)
+            {
                 wlr_output_enable(handle, false);
-                destroy_wayfire_output();
-                return;
-            } else {
+                if (state.source == OUTPUT_IMAGE_SOURCE_NONE)
+                {
+                    destroy_wayfire_output();
+                    return;
+                }
+            }
+            else
+            {
                 wlr_output_enable(handle, true);
             }
 
@@ -489,6 +495,7 @@ namespace wf
         void remove_output(wlr_output *output)
         {
             log_info("remove output: %s", output->name);
+
             outputs[output]->destroy_wayfire_output();
             outputs.erase(output);
 
@@ -552,7 +559,7 @@ namespace wf
                 auto& lo = this->outputs[handle];
 
                 wlr_output_layout_remove(output_layout, handle);
-                if (state.source == OUTPUT_IMAGE_SOURCE_SELF)
+                if (state.source & OUTPUT_IMAGE_SOURCE_SELF)
                 {
                     if (entry.second.position != output_state_t::default_position) {
                         wlr_output_layout_add(output_layout, handle,
@@ -596,7 +603,7 @@ namespace wf
             std::vector<wayfire_output*> result;
             for (auto& entry : outputs)
             {
-                if (entry.second->current_state.source == OUTPUT_IMAGE_SOURCE_SELF)
+                if (entry.second->current_state.source & OUTPUT_IMAGE_SOURCE_SELF)
                     result.push_back(entry.second->output.get());
             }
 
