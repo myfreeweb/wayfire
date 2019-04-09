@@ -503,7 +503,8 @@ namespace wf
 
         ~impl()
         {
-            headless_output->destroy_wayfire_output();
+            if (headless_output)
+                headless_output->destroy_wayfire_output();
             wlr_backend_destroy(headless_backend);
 
             core->disconnect_signal("reload-config", &on_config_reload);
@@ -671,7 +672,7 @@ namespace wf
             if (outputs.count(output))
                 return outputs[output]->output.get();
 
-            if (headless_output->handle == output)
+            if (headless_output && headless_output->handle == output)
                 return headless_output->output.get();
 
             return nullptr;
@@ -685,7 +686,7 @@ namespace wf
                     return entry.second->output.get();
             }
 
-            if (headless_output->handle->name == name)
+            if (headless_output && headless_output->handle->name == name)
                 return headless_output->output.get();
 
             return nullptr;
@@ -701,7 +702,10 @@ namespace wf
             }
 
             if (result.empty())
+            {
+                assert(headless_output);
                 result.push_back(headless_output->output.get());
+            }
 
             return result;
         }
@@ -728,7 +732,7 @@ namespace wf
             rx = lx;
             ry = ly;
 
-            if (handle == headless_output->handle) {
+            if (headless_output && handle == headless_output->handle) {
                 return headless_output->output.get();
             } else {
                 return outputs[handle]->output.get();
