@@ -10,22 +10,11 @@
 #include "wayfire-shell.hpp"
 #include "../core/seat/input-manager.hpp"
 
-#include <xf86drmMode.h>
-
-extern "C"
-{
-#include <wlr/backend/drm.h>
-}
-
 #include <linux/input.h>
 
 #include <algorithm>
 #include <assert.h>
-
-#include <cstring>
 #include <config.hpp>
-
-
 
 wayfire_output::wayfire_output(wlr_output *handle, wayfire_config *c)
 {

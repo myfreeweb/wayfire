@@ -539,21 +539,8 @@ void wayfire_view_t::set_minimized(bool minim)
          * Because the minimized layer doesn't move when switching workspaces,
          * we know that making it "visible" in the minimize layer will ensure
          * it is visible when we restore it */
-        auto box = get_wm_geometry();
-        auto visible = output->get_relative_geometry();
-
-        if (!(box & visible))
-        {
-            /* Make the center of the view on the current workspace */
-            int cx = box.x + box.width / 2;
-            int cy = box.y + box.height / 2;
-
-            int width = visible.width, height = visible.height;
-            /* compute center coordinates when moved to the current workspace */
-            int local_cx = (cx % width + width) % width;
-            int local_cy = (cy % height + height) % height;
-            move(box.x + local_cx - cx, box.y + local_cy - cy);
-        }
+        output->workspace->move_to_workspace(self(),
+            output->workspace->get_current_workspace());
     } else
     {
         output->workspace->add_view_to_layer(self(), WF_LAYER_WORKSPACE);

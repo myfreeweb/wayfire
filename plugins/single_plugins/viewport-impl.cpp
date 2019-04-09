@@ -60,6 +60,7 @@ class viewport_manager : public workspace_manager
 
         bool view_visible_on(wayfire_view, std::tuple<int, int>);
         bool view_visible_on(wayfire_view, std::tuple<int, int>, bool use_bbox);
+        void move_to_workspace(wayfire_view view, std::tuple<int, int>);
 
         std::vector<wayfire_view>
             get_views_on_workspace(std::tuple<int, int> ws, uint32_t layer_mask, bool wm_only);
@@ -264,6 +265,41 @@ bool viewport_manager::view_visible_on(wayfire_view view, std::tuple<int, int> v
         return view->intersects_region(g);
     else
         return g & view->get_wm_geometry();
+}
+
+void viewport_manager::move_to_workspace(wayfire_view view, std::tuple<int, int> ws)
+{
+    if (view->get_output() != output)
+    {
+        log_error("Cannot ensure view visibility for a view from a different output!");
+        return;
+    }
+
+    GetTuple(wx, wy, ws);
+    GetTuple(cx, cy, get_current_workspace());
+
+    auto box = view->get_wm_geometry();
+    auto visible = output->get_relative_geometry();
+    visible.x += (wx - cx) * visible.width;
+    visible.y += (wy - cy) * visible.height;
+
+    if (!(box & visible))
+    {
+        /* center of the view */
+        int cx = box.x + box.width / 2;
+        int cy = box.y + box.height / 2;
+
+        int width = visible.width, height = visible.height;
+        /* compute center coordinates when moved to the current workspace */
+        int local_cx = (cx % width + width) % width;
+        int local_cy = (cy % height + height) % height;
+
+        /* finally, calculate center coordinates in the target workspace */
+        int target_cx = local_cx + visible.x;
+        int target_cy = local_cy + visible.y;
+
+        view->move(box.x + target_cx - cx, box.y + target_cy - cy);
+    }
 }
 
 void viewport_manager::for_each_view(view_callback_proc_t call, uint32_t layers_mask)

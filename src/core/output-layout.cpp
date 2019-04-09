@@ -144,6 +144,8 @@ namespace wf
         for (auto& view : views)
         {
             to->attach_view(view);
+            to->workspace->move_to_workspace(view,
+                to->workspace->get_current_workspace());
             to->focus_view(view);
 
             if (view->maximized)
