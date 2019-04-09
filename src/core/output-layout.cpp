@@ -650,7 +650,6 @@ namespace wf
                 auto& state = entry.second;
                 auto& lo = this->outputs[handle];
 
-                wlr_output_layout_remove(output_layout, handle);
                 if (state.source & OUTPUT_IMAGE_SOURCE_SELF)
                 {
                     if (entry.second.position != output_state_t::default_position) {
@@ -659,6 +658,9 @@ namespace wf
                     } else {
                         wlr_output_layout_add_auto(output_layout, handle);
                     }
+                } else
+                {
+                    wlr_output_layout_remove(output_layout, handle);
                 }
 
                 lo->apply_state(state);
