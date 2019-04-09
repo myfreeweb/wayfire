@@ -19,6 +19,7 @@ void wayfire_exit::init(wayfire_config*)
         if (is_output_inhibited(core->get_active_output()))
             return;
 
+        core->emit_signal("shutdown", nullptr);
         wl_display_terminate(core->display);
     };
 

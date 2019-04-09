@@ -480,7 +480,8 @@ namespace wf
          * virtual output with the headless backend. */
         std::unique_ptr<output_layout_output_t> headless_output;
 
-        signal_callback_t on_config_reload;
+        bool shutdown_received = false;
+        signal_callback_t on_config_reload, on_shutdown;
 
         public:
         impl(wlr_backend *backend)
@@ -492,6 +493,10 @@ namespace wf
 
             on_config_reload = [=] (void*) { reconfigure_from_config(); };
             core->connect_signal("reload-config", &on_config_reload);
+            on_shutdown = [=] (void*) {
+                shutdown_received = true;
+            };
+            core->connect_signal("shutdown", &on_shutdown);
 
             headless_backend = wlr_headless_backend_create(core->display, NULL);
             /* The headless output will be typically destroyed on the first
@@ -630,7 +635,8 @@ namespace wf
                     ++count_enabled;
             }
 
-            if (!count_enabled && (!headless_output || !headless_output->output))
+            if (!count_enabled && !shutdown_received &&
+                (!headless_output || !headless_output->output))
             {
                 /* No outputs for this configuration. Time to use the headless
                  * output, which we add before disabling others, so that their
