@@ -529,6 +529,9 @@ namespace wf
 
         void remove_headless_output()
         {
+            if (!headless_output)
+                return;
+
             if (headless_output->current_state.source == OUTPUT_IMAGE_SOURCE_NONE)
                 return;
 
