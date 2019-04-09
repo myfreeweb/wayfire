@@ -171,6 +171,8 @@ class wayfire_view_t : public wayfire_surface_t, public wf_object_base
          * focus for this view, but the view is still "mapped", e.g. visible */
         bool _is_mapped = false;
 
+        wf::wl_idle_call idle_destruct;
+
         /* Save the real view layer when it gets fullscreened */
         uint32_t saved_layer = 0;
 

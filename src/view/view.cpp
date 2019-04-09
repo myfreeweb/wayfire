@@ -1203,7 +1203,7 @@ void wayfire_view_t::damage()
 void wayfire_view_t::destruct()
 {
     set_decoration(nullptr);
-    core->erase_view(self());
+    idle_destruct.run_once([&] () {core->erase_view(self());});
 }
 
 void wayfire_view_t::destroy()

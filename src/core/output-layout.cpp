@@ -14,6 +14,7 @@ extern "C"
 {
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
+#include <wlr/backend/headless.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 }
@@ -131,6 +132,7 @@ namespace wf
 {
     void transfer_views(wayfire_output *from, wayfire_output *to)
     {
+        log_info("transfer views from %s -> %s", from ? from->handle->name : "null", to ? to->handle->name : "null");
         /* first move each desktop view(e.g windows) to another output */
         std::vector<wayfire_view> views;
         from->workspace->for_each_view_reverse([&views] (wayfire_view view) { views.push_back(view); },
@@ -153,8 +155,9 @@ namespace wf
 
         /* just remove all other views - backgrounds, panels, etc.
          * desktop views have been removed by the previous cycle */
-        from->workspace->for_each_view([] (wayfire_view view) {
+        from->workspace->for_each_view([=] (wayfire_view view) {
             view->close();
+            from->detach_view(view);
             view->set_output(nullptr);
         }, WF_ALL_LAYERS);
         /* A note: at this point, some views might already have been deleted */
@@ -313,13 +316,17 @@ namespace wf
             auto wo = output.get();
 
             /* Focus the first output, but do not change the focus on subsequently
-             * added outputs */
-            if (core->get_active_output() == nullptr)
+             * added outputs. We also change the focus if the headless output was
+             * focused */
+            wlr_output *focused = core->get_active_output() ?
+                core->get_active_output()->handle : nullptr;
+            if (!focused || wlr_output_is_headless(focused))
                 core->focus_output(wo);
 
             output_added_signal data;
             data.output = wo;
-            core->output_layout->emit_signal("output-added", &data);
+            if (!wlr_output_is_headless(handle))
+                core->output_layout->emit_signal("output-added", &data);
         }
 
         void destroy_wayfire_output()
@@ -336,7 +343,8 @@ namespace wf
 
             output_removed_signal data;
             data.output = wo;
-            core->output_layout->emit_signal("output-removed", &data);
+            if (!wlr_output_is_headless(handle))
+                core->output_layout->emit_signal("output-removed", &data);
 
             this->output = nullptr;
         }
@@ -449,7 +457,7 @@ namespace wf
             }
 
             ensure_wayfire_output();
-            if (output && changed)
+            if (output && changed && !wlr_output_is_headless(handle))
                 output->emit_signal("output-configuration-changed", nullptr);
         }
 
@@ -461,6 +469,14 @@ namespace wf
 
         wlr_output_layout *output_layout;
         wl_listener_wrapper on_new_output;
+        wl_idle_call idle_init_headless;
+
+        wlr_backend *headless_backend;
+        /* Wayfire generally assumes that an enabled output is always available.
+         * However, when switching connectors or something it might happen that
+         * temporarily no output is available. For those cases, we create a
+         * virtual output with the headless backend. */
+        std::unique_ptr<output_layout_output_t> headless_output;
 
         signal_callback_t on_config_reload;
 
@@ -474,11 +490,54 @@ namespace wf
 
             on_config_reload = [=] (void*) { reconfigure_from_config(); };
             core->connect_signal("reload-config", &on_config_reload);
+
+            headless_backend = wlr_headless_backend_create(core->display, NULL);
+            /* The headless output will be typically destroyed on the first
+             * plugged monitor, however we need to create it here so that we
+             * support booting with 0 monitors */
+            idle_init_headless.run_once([&] () {
+                if (get_outputs().empty())
+                    ensure_headless_output();
+            });
         }
 
         ~impl()
         {
+            headless_output->destroy_wayfire_output();
+            wlr_backend_destroy(headless_backend);
+
             core->disconnect_signal("reload-config", &on_config_reload);
+        }
+
+        void ensure_headless_output()
+        {
+            log_info("new output: HEADLESS-1");
+
+            if (!headless_output)
+            {
+                auto handle = wlr_headless_add_output(headless_backend, 1280, 720);
+                headless_output = std::make_unique<output_layout_output_t> (handle);
+            }
+
+            /* Make sure that the headless output is up and running even before the
+             * next reconfiguration. This is needed because if we are removing
+             * an output, we might get into a situation where the last physical
+             * output has already been removed but we are yet to add the headless one */
+            headless_output->apply_state(headless_output->load_state_from_config());
+            wlr_output_layout_add_auto(output_layout, headless_output->handle);
+        }
+
+        void remove_headless_output()
+        {
+            if (headless_output->current_state.source == OUTPUT_IMAGE_SOURCE_NONE)
+                return;
+
+            log_info("remove output: HEADLESS-1");
+
+            output_state_t state;
+            state.source = OUTPUT_IMAGE_SOURCE_NONE;
+            headless_output->apply_state(state);
+            wlr_output_layout_remove(output_layout, headless_output->handle);
         }
 
         void add_output(wlr_output *output)
@@ -492,16 +551,20 @@ namespace wf
             reconfigure_from_config();
         }
 
-        void remove_output(wlr_output *output)
+        void remove_output(wlr_output *to_remove)
         {
-            log_info("remove output: %s", output->name);
+            auto active_outputs = get_outputs();
+            log_info("remove output: %s", to_remove->name);
 
-            outputs[output]->destroy_wayfire_output();
-            outputs.erase(output);
+            /* Unset mode, plus destroy wayfire_output */
+            auto configuration = get_current_configuration();
+            configuration[to_remove].source = OUTPUT_IMAGE_SOURCE_NONE;
+            apply_configuration(configuration);
 
-            /* we have no outputs, simply quit */
-            if (outputs.empty())
-                std::exit(0);
+            outputs.erase(to_remove);
+
+            /* If no physical outputs, then at least the headless output */
+            assert(get_outputs().size());
         }
 
         /* Get the current configuration of all outputs */
@@ -545,13 +608,30 @@ namespace wf
             }
 
             /* TODO: reject overlapping outputs */
-            /* TODO: possibly reject disjoint outputs? */
+            /* TODO: possibly reject disjoint outputs? Note: this doesn't apply
+             * if an output was destroyed */
+            /* TODO: reject no enabled output setups */
             return ok;
         }
 
         /** Apply the given configuration. Config MUST be a valid configuration */
         void apply_configuration(const output_configuration_t& config)
         {
+            int count_enabled = 0;
+            for (auto& entry : config)
+            {
+                if (entry.second.source & OUTPUT_IMAGE_SOURCE_SELF)
+                    ++count_enabled;
+            }
+
+            if (!count_enabled && (!headless_output || !headless_output->output))
+            {
+                /* No outputs for this configuration. Time to use the headless
+                 * output, which we add before disabling others, so that their
+                 * views can be transferred to the headless one */
+                ensure_headless_output();
+            }
+
             for (auto& entry : config)
             {
                 auto& handle = entry.first;
@@ -572,7 +652,11 @@ namespace wf
                 lo->apply_state(state);
             }
 
-            core->output_layout->emit_signal("configuration-updated", nullptr);
+            core->output_layout->emit_signal("configuration-changed", nullptr);
+
+            /* Make sure to remove the headless output if it is no longer needed */
+            if (count_enabled > 0)
+                remove_headless_output();
         }
 
         /* Public API functions */
@@ -584,6 +668,9 @@ namespace wf
             if (outputs.count(output))
                 return outputs[output]->output.get();
 
+            if (headless_output->handle == output)
+                return headless_output->output.get();
+
             return nullptr;
         }
 
@@ -594,6 +681,9 @@ namespace wf
                 if (entry.first->name == name)
                     return entry.second->output.get();
             }
+
+            if (headless_output->handle->name == name)
+                return headless_output->output.get();
 
             return nullptr;
         }
@@ -607,21 +697,21 @@ namespace wf
                     result.push_back(entry.second->output.get());
             }
 
+            if (result.empty())
+                result.push_back(headless_output->output.get());
+
             return result;
         }
 
         wayfire_output *get_next_output(wayfire_output *output)
         {
             auto os = get_outputs();
-            if (os.empty())
-                return nullptr;
 
             auto it = std::find(os.begin(), os.end(), output);
-            if (it == os.end()) {
-                return os.empty() ? nullptr : os[0];
+            if (it == os.end() || std::next(it) == os.end()) {
+                return os[0];
             } else {
-                ++it;
-                return *it;
+                return *(++it);
             }
         }
 
@@ -634,7 +724,12 @@ namespace wf
 
             rx = lx;
             ry = ly;
-            return outputs[handle]->output.get();
+
+            if (handle == headless_output->handle) {
+                return headless_output->output.get();
+            } else {
+                return outputs[handle]->output.get();
+            }
         }
 
         wayfire_output *get_output_at(int x, int y)
