@@ -57,7 +57,7 @@ class wayfire_xwayland_view_base : public wayfire_view_t
     virtual void destroy() override
     {
         if (output)
-            output->disconnect_signal("output-resized", &output_geometry_changed);
+            output->disconnect_signal("output-configuration-changed", &output_geometry_changed);
 
         on_map.disconnect();
         on_unmap.disconnect();
@@ -130,12 +130,12 @@ class wayfire_xwayland_view_base : public wayfire_view_t
     virtual void set_output(wayfire_output *wo) override
     {
         if (output)
-            output->disconnect_signal("output-resized", &output_geometry_changed);
+            output->disconnect_signal("output-configuration-changed", &output_geometry_changed);
 
         wayfire_view_t::set_output(wo);
 
         if (wo)
-            wo->connect_signal("output-resized", &output_geometry_changed);
+            wo->connect_signal("output-configuration-changed", &output_geometry_changed);
 
         send_configure();
     }

@@ -144,7 +144,7 @@ void viewport_manager::init(wayfire_output *o)
     o->connect_signal("attach-view", &view_detached);
     o->connect_signal("detach-view", &view_detached);
     o->connect_signal("view-change-viewport", &view_changed_viewport);
-    o->connect_signal("output-resized", &output_geometry_changed);
+    o->connect_signal("output-configuration-changed", &output_geometry_changed);
 }
 
 viewport_manager::~viewport_manager()
