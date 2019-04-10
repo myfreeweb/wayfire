@@ -393,7 +393,7 @@ namespace wf
         }
 
         /** Change the output mode */
-        bool apply_mode(const wlr_output_mode& mode)
+        void apply_mode(const wlr_output_mode& mode)
         {
             if (handle->current_mode)
             {
@@ -401,7 +401,7 @@ namespace wf
                 if (handle->current_mode->width == mode.width &&
                     handle->current_mode->height == mode.height &&
                     handle->current_mode->refresh == mode.refresh)
-                    return false;
+                    return;
             }
 
             refresh_custom_modes();
@@ -418,7 +418,7 @@ namespace wf
                     mode.refresh / 1000.0);
             }
 
-            return true;
+            return;
         }
 
         /** Apply the given state to the output, ignoring position.
@@ -445,21 +445,15 @@ namespace wf
                 wlr_output_enable(handle, true);
             }
 
-            bool changed = apply_mode(state.mode);
+            apply_mode(state.mode);
             if (handle->transform != state.transform)
-            {
-                changed = true;
                 wlr_output_set_transform(handle, state.transform);
-            }
 
             if (handle->scale != state.scale)
-            {
-                changed = true;
                 wlr_output_set_scale(handle, state.scale);
-            }
 
             ensure_wayfire_output();
-            if (output && changed && !wlr_output_is_headless(handle))
+            if (output && !wlr_output_is_headless(handle))
                 output->emit_signal("output-configuration-changed", nullptr);
         }
 
