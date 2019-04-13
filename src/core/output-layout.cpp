@@ -17,6 +17,7 @@ extern "C"
 #include <wlr/backend/headless.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_output_management_v1.h>
 }
 
 static wl_output_transform get_transform_from_string(std::string transform)
@@ -464,8 +465,13 @@ namespace wf
         std::map<wlr_output*, std::unique_ptr<output_layout_output_t>> outputs;
 
         wlr_output_layout *output_layout;
+        wlr_output_manager_v1 *output_manager;
+
         wl_listener_wrapper on_new_output;
+        wl_listener_wrapper on_output_manager_test;
+        wl_listener_wrapper on_output_manager_apply;
         wl_idle_call idle_init_headless;
+        wl_idle_call idle_update_configuration;
 
         wlr_backend *headless_backend;
         /* Wayfire generally assumes that an enabled output is always available.
@@ -500,6 +506,17 @@ namespace wf
                 if (get_outputs().empty())
                     ensure_headless_output();
             });
+
+            output_manager = wlr_output_manager_v1_create(core->display);
+            on_output_manager_test.set_callback([=] (void *data) {
+                apply_wlr_configuration((wlr_output_configuration_v1*) data, true);
+            });
+            on_output_manager_apply.set_callback([=] (void *data) {
+                apply_wlr_configuration((wlr_output_configuration_v1*) data, false);
+            });
+
+            on_output_manager_test.connect(&output_manager->events.test);
+            on_output_manager_apply.connect(&output_manager->events.apply);
         }
 
         ~impl()
@@ -509,6 +526,53 @@ namespace wf
             wlr_backend_destroy(headless_backend);
 
             core->disconnect_signal("reload-config", &on_config_reload);
+        }
+
+        output_configuration_t output_configuration_from_wlr_configuration(
+            wlr_output_configuration_v1 *configuration)
+        {
+            output_configuration_t result;
+            wlr_output_configuration_head_v1 *head;
+            wl_list_for_each(head, &configuration->heads, link)
+            {
+                if (!this->outputs.count(head->state.output))
+                {
+                    log_error("Output configuration request contains unknown"
+                        " output, probably a compositor bug!");
+                    continue;
+                }
+
+                auto& handle = head->state.output;
+                auto& state = result[handle];
+
+                if (!head->state.enabled)
+                {
+                    state.source = OUTPUT_IMAGE_SOURCE_NONE;
+                    continue;
+                }
+
+                state.source = OUTPUT_IMAGE_SOURCE_SELF;
+                state.mode = head->state.mode ? *head->state.mode :
+                    this->outputs[handle]->current_state.mode;
+                state.position = {head->state.x, head->state.y};
+                state.scale = head->state.scale;
+                state.transform = head->state.transform;
+            }
+
+            return result;
+        }
+
+        void apply_wlr_configuration(
+            wlr_output_configuration_v1 *wlr_configuration, bool test_only)
+        {
+            auto configuration =
+                output_configuration_from_wlr_configuration(wlr_configuration);
+
+            if (apply_configuration(configuration, test_only)) {
+                wlr_output_configuration_v1_send_succeeded(wlr_configuration);
+            } else {
+                wlr_output_configuration_v1_send_failed(wlr_configuration);
+            }
         }
 
         void ensure_headless_output()
@@ -582,6 +646,8 @@ namespace wf
             return configuration;
         }
 
+        output_configuration_t last_config_configuration;
+
         /** Load config from file, test and apply */
         void reconfigure_from_config()
         {
@@ -590,8 +656,11 @@ namespace wf
             for (auto& entry : this->outputs)
                 configuration[entry.first] = entry.second->load_state_from_config();
 
-            if (configuration == get_current_configuration())
+            if (configuration == get_current_configuration() ||
+                configuration == last_config_configuration)
+            {
                 return;
+            }
 
             if (test_configuration(configuration))
                 apply_configuration(configuration);
@@ -665,6 +734,30 @@ namespace wf
             /* Make sure to remove the headless output if it is no longer needed */
             if (count_enabled > 0)
                 remove_headless_output();
+
+            idle_update_configuration.run_once([=] () {
+                send_wlr_configuration();
+            });
+        }
+
+        void send_wlr_configuration()
+        {
+            auto wlr_configuration = wlr_output_configuration_v1_create();
+            for (auto& output : outputs)
+            {
+                auto head = wlr_output_configuration_head_v1_create(
+                    wlr_configuration, output.first);
+
+                auto box = wlr_output_layout_get_box(output_layout, output.first);
+                if (box)
+                {
+                    head->state.x = box->x;
+                    head->state.y = box->y;
+                }
+            }
+
+            wlr_output_manager_v1_set_configuration(output_manager,
+                wlr_configuration);
         }
 
         /* Public API functions */
