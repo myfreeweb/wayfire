@@ -231,11 +231,11 @@ namespace wf
 
             /* Finally, if there isn't any mode (for ex. wayland backend),
              * try a default resolution */
-            return wlr_output_mode {
-                .width = 1280,
-                .height = 720,
-                .refresh = 60000
-            };
+            wlr_output_mode default_mode;
+            default_mode.width = 1280;
+            default_mode.height = 720;
+            default_mode.refresh = 60000;
+            return default_mode;
         }
 
         /* Returns true if mode setting for the given output can succeed */
