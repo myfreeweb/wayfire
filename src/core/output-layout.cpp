@@ -14,7 +14,7 @@ extern "C"
 {
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
-#include <wlr/backend/headless.h>
+#include <wlr/backend/noop.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
@@ -326,11 +326,11 @@ namespace wf
             auto wo = output.get();
 
             /* Focus the first output, but do not change the focus on subsequently
-             * added outputs. We also change the focus if the headless output was
+             * added outputs. We also change the focus if the noop output was
              * focused */
             wlr_output *focused = core->get_active_output() ?
                 core->get_active_output()->handle : nullptr;
-            if (!focused || wlr_output_is_headless(focused))
+            if (!focused || wlr_output_is_noop(focused))
                 core->focus_output(wo);
 
             output_added_signal data;
@@ -461,7 +461,7 @@ namespace wf
                 wlr_output_set_scale(handle, state.scale);
 
             ensure_wayfire_output();
-            if (output && !wlr_output_is_headless(handle))
+            if (output && !wlr_output_is_noop(handle))
                 output->emit_signal("output-configuration-changed", nullptr);
         }
 
@@ -477,15 +477,15 @@ namespace wf
         wl_listener_wrapper on_new_output;
         wl_listener_wrapper on_output_manager_test;
         wl_listener_wrapper on_output_manager_apply;
-        wl_idle_call idle_init_headless;
+        wl_idle_call idle_init_noop;
         wl_idle_call idle_update_configuration;
 
-        wlr_backend *headless_backend;
+        wlr_backend *noop_backend;
         /* Wayfire generally assumes that an enabled output is always available.
          * However, when switching connectors or something it might happen that
          * temporarily no output is available. For those cases, we create a
-         * virtual output with the headless backend. */
-        std::unique_ptr<output_layout_output_t> headless_output;
+         * virtual output with the noop backend. */
+        std::unique_ptr<output_layout_output_t> noop_output;
 
         bool shutdown_received = false;
         signal_callback_t on_config_reload, on_shutdown;
@@ -505,13 +505,13 @@ namespace wf
             };
             core->connect_signal("shutdown", &on_shutdown);
 
-            headless_backend = wlr_headless_backend_create(core->display, NULL);
-            /* The headless output will be typically destroyed on the first
+            noop_backend = wlr_noop_backend_create(core->display);
+            /* The noop output will be typically destroyed on the first
              * plugged monitor, however we need to create it here so that we
              * support booting with 0 monitors */
-            idle_init_headless.run_once([&] () {
+            idle_init_noop.run_once([&] () {
                 if (get_outputs().empty())
-                    ensure_headless_output();
+                    ensure_noop_output();
             });
 
             output_manager = wlr_output_manager_v1_create(core->display);
@@ -528,9 +528,9 @@ namespace wf
 
         ~impl()
         {
-            if (headless_output)
-                headless_output->destroy_wayfire_output(true);
-            wlr_backend_destroy(headless_backend);
+            if (noop_output)
+                noop_output->destroy_wayfire_output(true);
+            wlr_backend_destroy(noop_backend);
 
             core->disconnect_signal("reload-config", &on_config_reload);
         }
@@ -582,38 +582,38 @@ namespace wf
             }
         }
 
-        void ensure_headless_output()
+        void ensure_noop_output()
         {
-            log_info("new output: HEADLESS-1");
+            log_info("new output: NOOP-1");
 
-            if (!headless_output)
+            if (!noop_output)
             {
-                auto handle = wlr_headless_add_output(headless_backend, 1280, 720);
-                headless_output = std::make_unique<output_layout_output_t> (handle);
+                auto handle = wlr_noop_add_output(noop_backend);
+                noop_output = std::make_unique<output_layout_output_t> (handle);
             }
 
-            /* Make sure that the headless output is up and running even before the
+            /* Make sure that the noop output is up and running even before the
              * next reconfiguration. This is needed because if we are removing
              * an output, we might get into a situation where the last physical
-             * output has already been removed but we are yet to add the headless one */
-            headless_output->apply_state(headless_output->load_state_from_config());
-            wlr_output_layout_add_auto(output_layout, headless_output->handle);
+             * output has already been removed but we are yet to add the noop one */
+            noop_output->apply_state(noop_output->load_state_from_config());
+            wlr_output_layout_add_auto(output_layout, noop_output->handle);
         }
 
-        void remove_headless_output()
+        void remove_noop_output()
         {
-            if (!headless_output)
+            if (!noop_output)
                 return;
 
-            if (headless_output->current_state.source == OUTPUT_IMAGE_SOURCE_NONE)
+            if (noop_output->current_state.source == OUTPUT_IMAGE_SOURCE_NONE)
                 return;
 
-            log_info("remove output: HEADLESS-1");
+            log_info("remove output: NOOP-1");
 
             output_state_t state;
             state.source = OUTPUT_IMAGE_SOURCE_NONE;
-            headless_output->apply_state(state);
-            wlr_output_layout_remove(output_layout, headless_output->handle);
+            noop_output->apply_state(state);
+            wlr_output_layout_remove(output_layout, noop_output->handle);
         }
 
         void add_output(wlr_output *output)
@@ -639,7 +639,7 @@ namespace wf
 
             outputs.erase(to_remove);
 
-            /* If no physical outputs, then at least the headless output */
+            /* If no physical outputs, then at least the noop output */
             assert(get_outputs().size() || shutdown_received);
         }
 
@@ -706,12 +706,12 @@ namespace wf
             }
 
             if (!count_enabled && !shutdown_received &&
-                (!headless_output || !headless_output->output))
+                (!noop_output || !noop_output->output))
             {
-                /* No outputs for this configuration. Time to use the headless
+                /* No outputs for this configuration. Time to use the noop
                  * output, which we add before disabling others, so that their
-                 * views can be transferred to the headless one */
-                ensure_headless_output();
+                 * views can be transferred to the noop one */
+                ensure_noop_output();
             }
 
             for (auto& entry : config)
@@ -738,9 +738,9 @@ namespace wf
 
             core->output_layout->emit_signal("configuration-changed", nullptr);
 
-            /* Make sure to remove the headless output if it is no longer needed */
+            /* Make sure to remove the noop output if it is no longer needed */
             if (count_enabled > 0)
-                remove_headless_output();
+                remove_noop_output();
 
             idle_update_configuration.run_once([=] () {
                 send_wlr_configuration();
@@ -776,8 +776,8 @@ namespace wf
             if (outputs.count(output))
                 return outputs[output]->output.get();
 
-            if (headless_output && headless_output->handle == output)
-                return headless_output->output.get();
+            if (noop_output && noop_output->handle == output)
+                return noop_output->output.get();
 
             return nullptr;
         }
@@ -790,8 +790,8 @@ namespace wf
                     return entry.second->output.get();
             }
 
-            if (headless_output && headless_output->handle->name == name)
-                return headless_output->output.get();
+            if (noop_output && noop_output->handle->name == name)
+                return noop_output->output.get();
 
             return nullptr;
         }
@@ -807,9 +807,9 @@ namespace wf
 
             if (result.empty())
             {
-                assert(headless_output || shutdown_received);
-                if (headless_output)
-                    result.push_back(headless_output->output.get());
+                assert(noop_output || shutdown_received);
+                if (noop_output)
+                    result.push_back(noop_output->output.get());
             }
 
             return result;
@@ -840,8 +840,8 @@ namespace wf
             rx = lx;
             ry = ly;
 
-            if (headless_output && handle == headless_output->handle) {
-                return headless_output->output.get();
+            if (noop_output && handle == noop_output->handle) {
+                return noop_output->output.get();
             } else {
                 return outputs[handle]->output.get();
             }
