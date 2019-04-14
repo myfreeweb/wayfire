@@ -227,6 +227,9 @@ int main(int argc, char *argv[])
     core->wake();
 
     wl_display_run(core->display);
+
+    /* Teardown */
+    wl_display_destroy_clients(core->display);
     wl_display_destroy(core->display);
 
     return EXIT_SUCCESS;

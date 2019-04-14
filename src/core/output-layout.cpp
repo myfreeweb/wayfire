@@ -133,11 +133,17 @@ namespace wf
 {
     void transfer_views(wayfire_output *from, wayfire_output *to)
     {
-        log_info("transfer views from %s -> %s", from ? from->handle->name : "null", to ? to->handle->name : "null");
+        assert(from);
+
+        log_info("transfer views from %s -> %s", from->handle->name, to ? to->handle->name : "null");
         /* first move each desktop view(e.g windows) to another output */
         std::vector<wayfire_view> views;
-        from->workspace->for_each_view_reverse([&views] (wayfire_view view) { views.push_back(view); },
-            WF_MIDDLE_LAYERS | WF_LAYER_MINIMIZED);
+        if (to)
+        {
+            /* If we aren't moving to another output, then there is no need to enumerate views either */
+            from->workspace->for_each_view_reverse([&views] (wayfire_view view) { views.push_back(view); },
+                WF_MIDDLE_LAYERS | WF_LAYER_MINIMIZED);
+        }
 
         for (auto& view : views)
             from->detach_view(view);
@@ -159,7 +165,8 @@ namespace wf
         /* just remove all other views - backgrounds, panels, etc.
          * desktop views have been removed by the previous cycle */
         from->workspace->for_each_view([=] (wayfire_view view) {
-            view->close();
+            if (view->is_mapped())
+                view->close();
             from->detach_view(view);
             view->set_output(nullptr);
         }, WF_ALL_LAYERS);
@@ -328,27 +335,27 @@ namespace wf
 
             output_added_signal data;
             data.output = wo;
-            if (!wlr_output_is_headless(handle))
-                core->output_layout->emit_signal("output-added", &data);
+            core->output_layout->emit_signal("output-added", &data);
         }
 
-        void destroy_wayfire_output()
+        void destroy_wayfire_output(bool shutdown)
         {
             if (!this->output)
                 return;
 
             log_info("disable output: %s", output->handle->name);
             auto wo = output.get();
-            if (core->get_active_output() == wo)
+
+            if (core->get_active_output() == wo && !shutdown)
                 core->focus_output(core->output_layout->get_next_output(wo));
 
-            transfer_views(wo, core->get_active_output());
+            /* It doesn't make sense to transfer to another output if we're
+             * going to shut down the compositor */
+            transfer_views(wo, shutdown ? nullptr : core->get_active_output());
 
             output_removed_signal data;
             data.output = wo;
-            if (!wlr_output_is_headless(handle))
-                core->output_layout->emit_signal("output-removed", &data);
-
+            core->output_layout->emit_signal("output-removed", &data);
             this->output = nullptr;
         }
 
@@ -426,7 +433,7 @@ namespace wf
          *
          * This won't have any effect if the output state can't be applied,
          * i.e if test_state(state) == false */
-        void apply_state(const output_state_t& state)
+        void apply_state(const output_state_t& state, bool is_shutdown = false)
         {
             if (!test_state(state))
                 return;
@@ -437,7 +444,7 @@ namespace wf
                 wlr_output_enable(handle, false);
                 if (state.source == OUTPUT_IMAGE_SOURCE_NONE)
                 {
-                    destroy_wayfire_output();
+                    destroy_wayfire_output(is_shutdown);
                     return;
                 }
             }
@@ -522,7 +529,7 @@ namespace wf
         ~impl()
         {
             if (headless_output)
-                headless_output->destroy_wayfire_output();
+                headless_output->destroy_wayfire_output(true);
             wlr_backend_destroy(headless_backend);
 
             core->disconnect_signal("reload-config", &on_config_reload);
@@ -633,7 +640,7 @@ namespace wf
             outputs.erase(to_remove);
 
             /* If no physical outputs, then at least the headless output */
-            assert(get_outputs().size());
+            assert(get_outputs().size() || shutdown_received);
         }
 
         /* Get the current configuration of all outputs */
@@ -726,7 +733,7 @@ namespace wf
                     wlr_output_layout_remove(output_layout, handle);
                 }
 
-                lo->apply_state(state);
+                lo->apply_state(state, shutdown_received);
             }
 
             core->output_layout->emit_signal("configuration-changed", nullptr);
@@ -800,8 +807,9 @@ namespace wf
 
             if (result.empty())
             {
-                assert(headless_output);
-                result.push_back(headless_output->output.get());
+                assert(headless_output || shutdown_received);
+                if (headless_output)
+                    result.push_back(headless_output->output.get());
             }
 
             return result;
@@ -824,7 +832,10 @@ namespace wf
             double lx = x, ly = y;
             wlr_output_layout_closest_point(output_layout, NULL, lx, ly, &lx, &ly);
             auto handle = wlr_output_layout_output_at(output_layout, lx, ly);
-            assert(handle);
+
+            assert(handle || shutdown_received);
+            if (!handle)
+                return nullptr;
 
             rx = lx;
             ry = ly;

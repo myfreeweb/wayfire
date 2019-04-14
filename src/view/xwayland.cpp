@@ -504,6 +504,10 @@ void init_xwayland()
 {
 #if WLR_HAS_XWAYLAND
     static wf::wl_listener_wrapper on_created;
+    static signal_callback_t on_shutdown = [&] (void*) {
+        wlr_xwayland_destroy(xwayland_handle);
+    };
+
     on_created.set_callback([] (void *data) {
         auto xsurf = (wlr_xwayland_surface*) data;
         if (xsurf->override_redirect) {
@@ -515,7 +519,10 @@ void init_xwayland()
 
     xwayland_handle = wlr_xwayland_create(core->display, core->compositor, false);
     if (xwayland_handle)
+    {
         on_created.connect(&xwayland_handle->events.new_surface);
+        core->connect_signal("shutdown", &on_shutdown);
+    }
 #endif
 }
 
