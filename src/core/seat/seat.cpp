@@ -101,6 +101,7 @@ void input_manager::update_drag_icon()
 
 void input_manager::create_seat()
 {
+    seat = wlr_seat_create(core->display, "default");
     cursor = std::make_unique<wf_cursor> ();
 
     request_set_cursor.set_callback([&] (void* data) {

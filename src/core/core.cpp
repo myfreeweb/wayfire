@@ -91,8 +91,8 @@ void wayfire_core::init(wayfire_config *conf)
     protocols.data_control = wlr_data_control_manager_v1_create(display);
     wlr_renderer_init_wl_display(renderer, display);
 
-    input = new input_manager();
     output_layout = std::make_unique<wf::output_layout_t> (backend);
+    input = new input_manager();
     core->compositor = wlr_compositor_create(display, wlr_backend_get_renderer(backend));
     init_desktop_apis();
 

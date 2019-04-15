@@ -39,9 +39,6 @@ void input_manager::update_capabilities()
 
 void input_manager::handle_new_input(wlr_input_device *dev)
 {
-    if (!cursor)
-        create_seat();
-
     log_info("handle new input: %s, default mapping: %s", dev->name, dev->output_name);
     input_devices.push_back(std::make_unique<wf_input_device_internal> (dev));
 
@@ -110,8 +107,8 @@ input_manager::input_manager()
         core->input->handle_new_input(dev);
     });
     input_device_created.connect(&core->backend->events.new_input);
-    seat = wlr_seat_create(core->display, "default");
 
+    create_seat();
     surface_map_state_changed = [=] (signal_data *data)
     {
         auto ev = static_cast<_surface_map_state_changed_signal*> (data);

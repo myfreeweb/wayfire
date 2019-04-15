@@ -807,8 +807,7 @@ namespace wf
 
             if (result.empty())
             {
-                assert(noop_output || shutdown_received);
-                if (noop_output)
+                if (noop_output && noop_output->output)
                     result.push_back(noop_output->output.get());
             }
 
