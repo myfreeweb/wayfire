@@ -91,10 +91,16 @@ void wayfire_core::init(wayfire_config *conf)
     protocols.data_control = wlr_data_control_manager_v1_create(display);
     wlr_renderer_init_wl_display(renderer, display);
 
+    /* Order here is important:
+     * 1. init_desktop_apis() must come after wlr_compositor_create(),
+     *    since Xwayland initialization depends on the compositor
+     * 2. input depends on output-layout
+     * 3. weston toy clients expect xdg-shell before wl_seat, i.e
+     * init_desktop_apis() should come before input */
     output_layout = std::make_unique<wf::output_layout_t> (backend);
-    input = new input_manager();
     core->compositor = wlr_compositor_create(display, wlr_backend_get_renderer(backend));
     init_desktop_apis();
+    input = new input_manager();
 
     protocols.screenshooter = wlr_screenshooter_create(display);
     protocols.screencopy = wlr_screencopy_manager_v1_create(display);
