@@ -9,15 +9,19 @@
 #include "util.hpp"
 #include "view-transform.hpp"
 #include <xf86drmMode.h>
+#include <sstream>
 
 extern "C"
 {
+#define static
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
 #include <wlr/backend/noop.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
+#undef static
 }
 
 static wl_output_transform get_transform_from_string(std::string transform)
@@ -184,6 +188,12 @@ namespace wf
         if (source == OUTPUT_IMAGE_SOURCE_NONE)
             return other.source == OUTPUT_IMAGE_SOURCE_NONE;
 
+        if (source == OUTPUT_IMAGE_SOURCE_MIRROR)
+        {
+            return other.source == OUTPUT_IMAGE_SOURCE_MIRROR &&
+                mirror_from == other.mirror_from;
+        }
+
         bool eq = true;
 
         eq &= source == other.source;
@@ -264,6 +274,34 @@ namespace wf
             return true;
         }
 
+        wlr_output_mode load_mode_from_config()
+        {
+            wlr_output_mode mode;
+            mode.width = -1;
+
+            if (mode_opt->as_string() != default_value &&
+                mode_opt->as_string() != "auto")
+            {
+                auto value = parse_output_mode(mode_opt->as_string());
+                if (value.second)
+                {
+                    if (is_mode_supported(value.first)) {
+                        mode = value.first;
+                    } else {
+                        log_error("Output mode %s for output %s is not "
+                            " supported, try adding a custom mode.",
+                            mode_opt->as_string().c_str(), handle->name);
+                    }
+                }
+            }
+
+            /* Nothing usable in config, try to pick a default mode */
+            if (mode.width < 0)
+                mode = select_default_mode();
+
+            return mode;
+        }
+
         output_state_t load_state_from_config()
         {
             output_state_t state;
@@ -285,29 +323,20 @@ namespace wf
                 state.source = OUTPUT_IMAGE_SOURCE_NONE;
                 return state;
             }
+            else if (mode_opt->as_string().find("mirror") == 0)
+            {
+                state.source = OUTPUT_IMAGE_SOURCE_MIRROR;
+
+                std::stringstream ss(mode_opt->as_string());
+                ss >> state.mirror_from; // skip the mirror word
+                ss >> state.mirror_from;
+
+                state.mode = select_default_mode();
+            }
             else
             {
                 state.source = OUTPUT_IMAGE_SOURCE_SELF;
-                state.mode.width = -1;
-                if (mode_opt->as_string() != default_value &&
-                    mode_opt->as_string() != "auto")
-                {
-                    auto value = parse_output_mode(mode_opt->as_string());
-                    if (value.second)
-                    {
-                        if (is_mode_supported(value.first)) {
-                            state.mode = value.first;
-                        } else {
-                            log_error("Output mode %s for output %s is not "
-                                " supported, try adding a custom mode.",
-                                mode_opt->as_string().c_str(), handle->name);
-                        }
-                    }
-                }
-
-                /* Nothing usable in config, try to pick a default mode */
-                if (state.mode.width < 0)
-                    state.mode = select_default_mode();
+                state.mode = load_mode_from_config();
             }
 
             state.scale = scale_opt->as_double();
@@ -400,6 +429,9 @@ namespace wf
             if (state.source == OUTPUT_IMAGE_SOURCE_NONE)
                 return true;
 
+            if (state.source == OUTPUT_IMAGE_SOURCE_MIRROR)
+                return true;
+
             /* XXX: are there more things to check? */
             refresh_custom_modes();
             return is_mode_supported(state.mode);
@@ -434,6 +466,89 @@ namespace wf
             return;
         }
 
+        /* Mirroring implementation */
+        wl_listener_wrapper on_mirrored_frame;
+        wl_listener_wrapper on_frame;
+
+        /** Render the output using texture as source */
+        void render_output(wlr_texture *texture)
+        {
+            timespec render_start;
+            clock_gettime(CLOCK_MONOTONIC, &render_start);
+
+            wlr_output_make_current(handle, NULL);
+            wlr_renderer_begin(core->renderer, handle->width, handle->height);
+
+            /* Project a box filling the whole screen */
+            float projection[9], box[9];
+            wlr_matrix_projection(projection, handle->width, handle->height,
+                WL_OUTPUT_TRANSFORM_NORMAL);
+
+            wlr_box geometry = {0, 0, handle->width, handle->height};
+            wlr_matrix_project_box(box, &geometry, WL_OUTPUT_TRANSFORM_NORMAL,
+                0.0, projection);
+
+            wlr_render_texture_with_matrix(core->renderer, texture, box, 1.0);
+            wlr_renderer_end(core->renderer);
+            wlr_output_swap_buffers(handle, &render_start, NULL);
+        }
+
+        /* Load output contents and render them */
+        void handle_frame()
+        {
+            auto wo = core->output_layout->find_output(current_state.mirror_from);
+            if (!wo)
+            {
+                log_error("Cannot find mirrored output %s.",
+                    current_state.mirror_from.c_str());
+                return;
+            }
+
+            wlr_dmabuf_attributes attributes;
+            if (!wlr_output_export_dmabuf(wo->handle, &attributes))
+            {
+                log_error("Failed reading mirrored output contents");
+                return;
+            }
+
+            /* We export the output to mirror from to a dmabuf, then create
+             * a texture from this and use it to render "our" output */
+            auto texture = wlr_texture_from_dmabuf(core->renderer, &attributes);
+            render_output(texture);
+
+            wlr_texture_destroy(texture);
+            wlr_dmabuf_attributes_finish(&attributes);
+        }
+
+        void setup_mirror()
+        {
+            /* Check if we can mirror */
+            auto wo = core->output_layout->find_output(current_state.mirror_from);
+            if (!wo)
+            {
+                log_error("Cannot find mirrored output %s.",
+                    current_state.mirror_from.c_str());
+                return;
+            }
+
+            wlr_output_schedule_frame(handle);
+            on_mirrored_frame.set_callback([=] (void*) {
+                /* The mirrored output was repainted, schedule repaint
+                 * for us as well */
+                wlr_output_schedule_frame(handle);
+            });
+            on_mirrored_frame.connect(&wo->handle->events.swap_buffers);
+
+            on_frame.set_callback([=] (void*) { handle_frame(); });
+            on_frame.connect(&handle->events.frame);
+        }
+
+        void teardown_mirror()
+        {
+            on_mirrored_frame.disconnect();
+            on_frame.disconnect();
+        }
+
         /** Apply the given state to the output, ignoring position.
          *
          * This won't have any effect if the output state can't be applied,
@@ -444,30 +559,45 @@ namespace wf
                 return;
 
             this->current_state = state;
+
+            /* Even if output will remain mirrored, we can tear it down and set
+             * up again, in case the output to mirror from changed */
+            teardown_mirror();
             if (state.source & OUTPUT_IMAGE_SOURCE_NONE)
             {
+                /* DPMS or OFF */
                 wlr_output_enable(handle, false);
                 if (state.source == OUTPUT_IMAGE_SOURCE_NONE)
                 {
+                    /* OFF */
                     destroy_wayfire_output(is_shutdown);
                     return;
                 }
             }
             else
             {
+                /* SELF or MIRROR */
                 wlr_output_enable(handle, true);
             }
 
             apply_mode(state.mode);
-            if (handle->transform != state.transform)
-                wlr_output_set_transform(handle, state.transform);
+            if (state.source & OUTPUT_IMAGE_SOURCE_SELF)
+            {
+                if (handle->transform != state.transform)
+                    wlr_output_set_transform(handle, state.transform);
 
-            if (handle->scale != state.scale)
-                wlr_output_set_scale(handle, state.scale);
+                if (handle->scale != state.scale)
+                    wlr_output_set_scale(handle, state.scale);
 
-            ensure_wayfire_output();
-            if (output && !wlr_output_is_noop(handle))
-                output->emit_signal("output-configuration-changed", nullptr);
+                ensure_wayfire_output();
+                if (output && !wlr_output_is_noop(handle))
+                    output->emit_signal("output-configuration-changed", nullptr);
+            }
+            else /* state.source == OUTPUT_IMAGE_SOURCE_MIRROR */
+            {
+                destroy_wayfire_output(is_shutdown);
+                setup_mirror();
+            }
         }
 
     };
@@ -702,6 +832,7 @@ namespace wf
             /* TODO: possibly reject disjoint outputs? Note: this doesn't apply
              * if an output was destroyed */
             /* TODO: reject no enabled output setups */
+            /* TODO: reject bad mirror configurations */
             return ok;
         }
 
@@ -735,7 +866,6 @@ namespace wf
                 !active_outputs.empty() && count_remaining_enabled == 0;
             bool is_noop_active = noop_output && noop_output->output;
 
-            bool tr = false;
             if (turning_off_all_active && !shutdown_received && !is_noop_active)
             {
                 /* If we aren't shutting down, and we will turn off all the
@@ -743,7 +873,6 @@ namespace wf
                  * temporary output to store views in, until a real output is
                  * enabled again */
                 ensure_noop_output();
-                tr = true;
             }
 
             /* First: disable all outputs that need disabling */
@@ -784,6 +913,20 @@ namespace wf
                     }
 
                     lo->apply_state(state, shutdown_received);
+                }
+            }
+
+            /* Third: enable mirrored outputs */
+            for (auto& entry : config)
+            {
+                auto& handle = entry.first;
+                auto& state = entry.second;
+                auto& lo = this->outputs[handle];
+
+                if (state.source == OUTPUT_IMAGE_SOURCE_MIRROR)
+                {
+                    lo->apply_state(state, shutdown_received);
+                    wlr_output_layout_remove(output_layout, handle);
                 }
             }
 

@@ -28,6 +28,8 @@ namespace wf
         OUTPUT_IMAGE_SOURCE_NONE = 0x2,
         /** Output is in DPMS state */
         OUTPUT_IMAGE_SOURCE_DPMS = 0x3,
+        /** Output is in mirroring state */
+        OUTPUT_IMAGE_SOURCE_MIRROR = 0x4
     };
 
     /** Represents the current state of an output as the output layout sees it */
@@ -35,7 +37,8 @@ namespace wf
     {
         /* The current source of the output.
          *
-         * If source is none, then the values below don't have a meaning */
+         * If source is none, then the values below don't have a meaning.
+         * If source is mirror, then only mirror_from and mode have a meaning */
         output_image_source_t source = OUTPUT_IMAGE_SOURCE_INVALID;
 
         /** the position of the output in the compositor space.
@@ -47,8 +50,13 @@ namespace wf
         /** Only width, height and refresh fields are used. */
         wlr_output_mode mode;
 
+        /* The transform of the output */
         wl_output_transform transform;
+        /* The scale of the output */
         double scale;
+
+        /* Output to take the image from. Valid only if source is mirror */
+        std::string mirror_from;
 
         bool operator == (const output_state_t& other) const;
     };
