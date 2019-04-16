@@ -40,7 +40,8 @@ std::pair<wlr_output_mode, bool> parse_output_mode(std::string modeline)
     wlr_output_mode mode;
     /* If mode refresh is invalid, then it will be autodetected */
     mode.refresh = 0;
-    int read = std::sscanf(modeline.c_str(), "%d x %d @ %d", &mode.width, &mode.height, &mode.refresh);
+    int read = std::sscanf(modeline.c_str(), "%d x %d @ %d",
+        &mode.width, &mode.height, &mode.refresh);
 
     if (mode.refresh < 1000)
         mode.refresh *= 1000;
@@ -70,7 +71,8 @@ std::pair<wf_point, bool> parse_output_layout(std::string layout)
     return {pos, true};
 }
 
-wlr_output_mode *find_matching_mode(wlr_output *output, const wlr_output_mode& reference)
+wlr_output_mode *find_matching_mode(wlr_output *output,
+    const wlr_output_mode& reference)
 {
     wlr_output_mode *mode;
     wlr_output_mode *best = NULL;
@@ -135,13 +137,16 @@ namespace wf
     {
         assert(from);
 
-        log_info("transfer views from %s -> %s", from->handle->name, to ? to->handle->name : "null");
+        log_info("transfer views from %s -> %s", from->handle->name,
+            to ? to->handle->name : "null");
         /* first move each desktop view(e.g windows) to another output */
         std::vector<wayfire_view> views;
         if (to)
         {
-            /* If we aren't moving to another output, then there is no need to enumerate views either */
-            from->workspace->for_each_view_reverse([&views] (wayfire_view view) { views.push_back(view); },
+            /* If we aren't moving to another output, then there is no need to
+             * enumerate views either */
+            from->workspace->for_each_view_reverse(
+                [&views] (wayfire_view view) { views.push_back(view); },
                 WF_MIDDLE_LAYERS | WF_LAYER_MINIMIZED);
         }
 
@@ -494,7 +499,9 @@ namespace wf
         public:
         impl(wlr_backend *backend)
         {
-            on_new_output.set_callback([=] (void *data) { add_output((wlr_output*) data); });
+            on_new_output.set_callback([=] (void *data) {
+                add_output((wlr_output*) data);
+            });
             on_new_output.connect(&backend->events.new_output);
 
             output_layout = wlr_output_layout_create();
@@ -623,7 +630,9 @@ namespace wf
 
             auto lo = new output_layout_output_t(output);
             outputs[output] = std::unique_ptr<output_layout_output_t>(lo);
-            lo->on_destroy.set_callback([output, this] (void*) { remove_output(output); });
+            lo->on_destroy.set_callback([output, this] (void*) {
+                remove_output(output);
+            });
 
             reconfigure_from_config();
         }
@@ -902,7 +911,8 @@ namespace wf
             return get_output_coords_at(x, y, dummy_x, dummy_y);
         }
 
-        bool apply_configuration(const output_configuration_t& configuration, bool test_only)
+        bool apply_configuration(const output_configuration_t& configuration,
+            bool test_only)
         {
             bool ok = test_configuration(configuration);
             if (ok && !test_only)
