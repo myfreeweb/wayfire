@@ -479,6 +479,7 @@ namespace wf
         wl_listener_wrapper on_output_manager_apply;
         wl_idle_call idle_init_noop;
         wl_idle_call idle_update_configuration;
+        wl_timer timer_remove_noop;
 
         wlr_backend *noop_backend;
         /* Wayfire generally assumes that an enabled output is always available.
@@ -698,22 +699,65 @@ namespace wf
         /** Apply the given configuration. Config MUST be a valid configuration */
         void apply_configuration(const output_configuration_t& config)
         {
-            int count_enabled = 0;
+            /* The order in which we enable and disable outputs is important.
+             * Firstly, on some systems where there aren't enough CRTCs, we can
+             * only enable a subset of all outputs at once. This means we should
+             * first try to disable as many outputs as possible, and only then
+             * start enabling new ones.
+             *
+             * Secondly, we need to check when we need to enable noop output -
+             * which is exactly when all currently enabled outputs are going to
+             * be disabled */
+
+            /* Number of outputs that were enabled and continue to be enabled */
+            int count_remaining_enabled = 0;
+            auto active_outputs = get_outputs();
+            for (auto& wo : active_outputs)
+            {
+                auto it = config.find(wo->handle);
+                if (it != config.end() &&
+                    (it->second.source & OUTPUT_IMAGE_SOURCE_SELF))
+                {
+                    ++count_remaining_enabled;
+                }
+            }
+
+            bool turning_off_all_active =
+                !active_outputs.empty() && count_remaining_enabled == 0;
+            bool is_noop_active = noop_output && noop_output->output;
+
+            bool tr = false;
+            if (turning_off_all_active && !shutdown_received && !is_noop_active)
+            {
+                /* If we aren't shutting down, and we will turn off all the
+                 * currently enabled outputs, we'll need the noop output, as a
+                 * temporary output to store views in, until a real output is
+                 * enabled again */
+                ensure_noop_output();
+                tr = true;
+            }
+
+            /* First: disable all outputs that need disabling */
             for (auto& entry : config)
             {
-                if (entry.second.source & OUTPUT_IMAGE_SOURCE_SELF)
-                    ++count_enabled;
+                auto& handle = entry.first;
+                auto& state = entry.second;
+                auto& lo = this->outputs[handle];
+
+                if (!(state.source & OUTPUT_IMAGE_SOURCE_SELF))
+                {
+                    /* First shut down the output, move its views, etc. while it
+                     * is still in the output layout and its global is active.
+                     *
+                     * This is needed so that clients can receive
+                     * wl_surface.leave events for the to be destroyed output */
+                    lo->apply_state(state, shutdown_received);
+                    wlr_output_layout_remove(output_layout, handle);
+                }
             }
 
-            if (!count_enabled && !shutdown_received &&
-                (!noop_output || !noop_output->output))
-            {
-                /* No outputs for this configuration. Time to use the noop
-                 * output, which we add before disabling others, so that their
-                 * views can be transferred to the noop one */
-                ensure_noop_output();
-            }
-
+            /* Second: enable outputs */
+            int count_enabled = 0;
             for (auto& entry : config)
             {
                 auto& handle = entry.first;
@@ -722,25 +766,31 @@ namespace wf
 
                 if (state.source & OUTPUT_IMAGE_SOURCE_SELF)
                 {
+                    ++count_enabled;
                     if (entry.second.position != output_state_t::default_position) {
                         wlr_output_layout_add(output_layout, handle,
                             state.position.x, state.position.y);
                     } else {
                         wlr_output_layout_add_auto(output_layout, handle);
                     }
-                } else
-                {
-                    wlr_output_layout_remove(output_layout, handle);
-                }
 
-                lo->apply_state(state, shutdown_received);
+                    lo->apply_state(state, shutdown_received);
+                }
             }
 
             core->output_layout->emit_signal("configuration-changed", nullptr);
 
-            /* Make sure to remove the noop output if it is no longer needed */
             if (count_enabled > 0)
-                remove_noop_output();
+            {
+                /* Make sure to remove the noop output if it is no longer needed.
+                 * NB: Libwayland has a bug when a global is created and
+                 * immediately destroyed, as clients don't have enough time
+                 * to bind it. That's why we don't destroy noop immediately,
+                 * but only after a timeout */
+                timer_remove_noop.set_timeout(1000, [=] () {
+                    remove_noop_output();
+                });
+            }
 
             idle_update_configuration.run_once([=] () {
                 send_wlr_configuration();

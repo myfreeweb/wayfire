@@ -21,6 +21,7 @@ namespace wf
     /** Represents the source of pixels for this output */
     enum output_image_source_t
     {
+        OUTPUT_IMAGE_SOURCE_INVALID = 0x0,
         /** Output renders itself */
         OUTPUT_IMAGE_SOURCE_SELF = 0x1,
         /** Output is turned off */
@@ -35,7 +36,7 @@ namespace wf
         /* The current source of the output.
          *
          * If source is none, then the values below don't have a meaning */
-        output_image_source_t source = OUTPUT_IMAGE_SOURCE_SELF;
+        output_image_source_t source = OUTPUT_IMAGE_SOURCE_INVALID;
 
         /** the position of the output in the compositor space.
          * if position is equal to the default_position defined below,
