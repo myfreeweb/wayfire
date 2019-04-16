@@ -3,6 +3,7 @@
 #include "core.hpp"
 #include "output-layout.hpp"
 #include "workspace-manager.hpp"
+#include "render-manager.hpp"
 #include "signal-definitions.hpp"
 #include "seat/input-manager.hpp"
 #include "seat/input-inhibit.hpp"
@@ -524,10 +525,25 @@ namespace wf
         {
             /* Check if we can mirror */
             auto wo = core->output_layout->find_output(current_state.mirror_from);
-            if (!wo)
+            bool mirror_active = (wo != nullptr);
+
+            if (wo)
             {
-                log_error("Cannot find mirrored output %s.",
-                    current_state.mirror_from.c_str());
+                auto config = core->output_layout->get_current_configuration();
+                auto& wo_state = config[wo->handle];
+
+                if (wo_state.source & OUTPUT_IMAGE_SOURCE_NONE)
+                    mirror_active = false;
+            }
+
+            if (!mirror_active)
+            {
+                /* If we mirror from a DPMS or an OFF output, we should turn
+                 * off this output as well */
+                wlr_output_enable(handle, false);
+
+                log_info("%s: Cannot mirror from output %s. Disabling output.",
+                    handle->name, current_state.mirror_from.c_str());
                 return;
             }
 
@@ -590,7 +606,8 @@ namespace wf
                     wlr_output_set_scale(handle, state.scale);
 
                 ensure_wayfire_output();
-                if (output && !wlr_output_is_noop(handle))
+                output->render->damage_whole();
+                if (!wlr_output_is_noop(handle))
                     output->emit_signal("output-configuration-changed", nullptr);
             }
             else /* state.source == OUTPUT_IMAGE_SOURCE_MIRROR */
