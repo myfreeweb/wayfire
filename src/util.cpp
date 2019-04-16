@@ -334,6 +334,13 @@ static void handle_idle_listener(void *data)
     call->execute();
 }
 
+static int handle_timeout(void *data)
+{
+    auto timer = (wf::wl_timer*) (data);
+    timer->execute();
+    return 0;
+}
+
 namespace wf
 {
     wl_listener_wrapper::wl_listener_wrapper()
@@ -429,6 +436,33 @@ namespace wf
     void wl_idle_call::execute()
     {
         source = nullptr;
+        if (call)
+            call();
+    }
+
+    wl_timer::~wl_timer()
+    {
+        if (source)
+            wl_event_source_remove(source);
+    }
+
+    void wl_timer::set_timeout(uint32_t timeout_ms, callback_t call)
+    {
+        this->call = call;
+        if (!source)
+            source = wl_event_loop_add_timer(core->ev_loop, handle_timeout, this);
+
+        wl_event_source_timer_update(source, timeout_ms);
+    }
+
+    void wl_timer::disconnect()
+    {
+        wl_event_source_remove(source);
+        source = NULL;
+    }
+
+    void wl_timer::execute()
+    {
         if (call)
             call();
     }

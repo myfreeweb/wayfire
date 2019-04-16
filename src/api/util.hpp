@@ -201,6 +201,33 @@ namespace wf
         wl_event_loop *loop = NULL;
         wl_event_source *source = NULL;
     };
+
+    /**
+     * A wrapper for wl_event_loop_add_timer / wl_event_loop_timer_update
+     */
+    class wl_timer
+    {
+        public:
+        using callback_t = std::function<void()>;
+
+        /** Disconnects the timer if connected */
+        ~wl_timer();
+
+        /** Execute call after a timeout of timeout_ms */
+        void set_timeout(uint32_t timeout_ms, callback_t call);
+
+        /** If a timeout has been registered, but not fired yet, remove the
+         * timeout. Otherwise no-op */
+        void disconnect();
+
+        /* Run the stored call now, regardless of the timeout. No-op if not
+         * connected */
+        void execute();
+
+        private:
+        callback_t call;
+        wl_event_source *source = NULL;
+    };
 }
 
 #endif /* end of include guard: WF_UTIL_HPP */
