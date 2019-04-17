@@ -1,7 +1,8 @@
 [core]
-plugins = viewport_impl resize command vswitch oswitch rotator grid apps-logger \
+plugins = viewport_impl resize command vswitch oswitch rotator grid \
           window-rules autostart wrot place invert animate move switcher \
-          fast-switcher fisheye zoom expo cube wobbly decoration alpha
+          fast-switcher fisheye zoom expo cube wobbly decoration alpha \
+          idle
 
 # number of horizontal workspaces
 vwidth = 3
@@ -239,9 +240,14 @@ speed = 0.005
 [invert]
 toggle = <super> KEY_I
 
+[idle]
 # disable the compositor going idle
-[idle-inhibit]
 toggle = <super> <shift> KEY_I
+
+# set the outputs in powersave mode after 600 seconds of inactivity
+dpms_timeout = 600
+# For executing arbitrary commands after a period of inactivity, check swayidle:
+# https://github.com/swaywm/swayidle
 
 # rotate the active window
 # doesn't work very well with some other plugins
