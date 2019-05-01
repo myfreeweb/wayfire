@@ -72,7 +72,7 @@ struct wf_output_damage
         if (!damage_manager)
             return false;
 
-        auto r = wlr_output_damage_make_current(damage_manager, &need_swap,
+        auto r = wlr_output_damage_attach_render(damage_manager, &need_swap,
             out_damage.to_pixman());
         if (r)
         {
@@ -89,9 +89,9 @@ struct wf_output_damage
         return r;
     }
 
-    void swap_buffers(timespec *when, wf_region& swap_damage)
+    void swap_buffers(wf_region& swap_damage)
     {
-        if (!damage_manager)
+        if (!output)
             return;
 
         int w, h;
@@ -102,8 +102,9 @@ struct wf_output_damage
         wlr_region_transform(swap_damage.to_pixman(), swap_damage.to_pixman(),
             transform, w, h);
 
-        wlr_output_damage_swap_buffers(damage_manager, when,
+        wlr_output_set_damage(output,
             const_cast<wf_region&> (swap_damage).to_pixman());
+        wlr_output_commit(output);
         frame_damage.clear();
     }
 
@@ -283,9 +284,6 @@ void render_manager::set_renderer(render_hook_t rh)
 void render_manager::paint()
 {
     /* Part 1: frame setup: query damage, etc. */
-    timespec repaint_started;
-    clock_gettime(CLOCK_MONOTONIC, &repaint_started);
-
     frame_damage.clear();
     run_effects(effects[WF_OUTPUT_EFFECT_PRE]);
 
@@ -357,7 +355,7 @@ void render_manager::paint()
 
     /* Part 5: finalize frame: swap buffers, send frame_done, etc */
     OpenGL::unbind_output(output);
-    output_damage->swap_buffers(&repaint_started, swap_damage);
+    output_damage->swap_buffers(swap_damage);
     post_paint();
 }
 

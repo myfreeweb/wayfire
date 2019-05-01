@@ -474,10 +474,7 @@ namespace wf
         /** Render the output using texture as source */
         void render_output(wlr_texture *texture)
         {
-            timespec render_start;
-            clock_gettime(CLOCK_MONOTONIC, &render_start);
-
-            wlr_output_make_current(handle, NULL);
+            wlr_output_attach_render(handle, NULL);
             wlr_renderer_begin(core->renderer, handle->width, handle->height);
 
             /* Project a box filling the whole screen */
@@ -491,7 +488,7 @@ namespace wf
 
             wlr_render_texture_with_matrix(core->renderer, texture, box, 1.0);
             wlr_renderer_end(core->renderer);
-            wlr_output_swap_buffers(handle, &render_start, NULL);
+            wlr_output_commit(handle);
         }
 
         /* Load output contents and render them */
@@ -553,7 +550,7 @@ namespace wf
                  * for us as well */
                 wlr_output_schedule_frame(handle);
             });
-            on_mirrored_frame.connect(&wo->handle->events.swap_buffers);
+            on_mirrored_frame.connect(&wo->handle->events.precommit);
 
             on_frame.set_callback([=] (void*) { handle_frame(); });
             on_frame.connect(&handle->events.frame);
