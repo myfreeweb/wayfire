@@ -7,5 +7,26 @@
 		<_short>Font</_short>
 		<default>serif</default>
 	</option>
+
+  <option name="title_height" type="int">
+    <_short>Title height</_short>
+    <default>100</default>
+  </option>
+
+  <option name="border_size" type="int">
+    <_short>Border size</_short>
+    <default>5</default>
+  </option>
+
+  <option name="active_color" type="color">
+    <_short>Color when window is active</_short>
+    <default>#222222AA</default>
+  </option>
+
+  <option name="inactive_color" type="color">
+    <_short>Color when window is inactive</_short>
+    <default>#333333DD</default>
+  </option>
+
 	</plugin>
 </wayfire>
