@@ -1,6 +1,7 @@
 #include "deco-theme.hpp"
 #include <wayfire/core.hpp>
 #include <wayfire/opengl.hpp>
+#include <config.h>
 
 extern "C"
 {
@@ -111,7 +112,7 @@ cairo_surface_t *decoration_theme_t::get_button_surface(button_type_t button,
     {
         case BUTTON_CLOSE:
             button_icon = cairo_image_surface_create_from_png(
-                "/home/ilex/work/wayfire/plugins/decor/resources/close.png");
+                INSTALL_PREFIX "/share/wayfire/decoration/resources/close.png");
             break;
         default:
             assert(false);
