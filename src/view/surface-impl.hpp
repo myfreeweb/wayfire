@@ -47,9 +47,6 @@ class wlr_surface_base_t
     wf::wl_listener_wrapper::callback_t handle_new_subsurface;
     wf::wl_listener_wrapper on_commit, on_destroy, on_new_subsurface;
 
-    virtual void damage_surface_box(const wlr_box& box);
-    virtual void damage_surface_region(const wf::region_t& region);
-
     void apply_surface_damage();
     wlr_surface_base_t(wf::surface_interface_t *self);
     /* Pointer to this as surface_interface, see requirement above */

@@ -423,23 +423,12 @@ class view_interface_t : public surface_interface_t, public wf::object_base_t
     /** get_offset() is not valid for views */
     virtual wf::point_t get_offset() override { return {0, 0}; }
 
-    /**
-     * Damage the given box. It is assumed that the box is already transformed
-     * by the view's transformers.
-     *
-     * The main difference with directly damaging the output is that this will
-     * add the damage to all workspaces the view is visible on, in case of shell
-     * views.
-     */
-    virtual void damage_raw(const wlr_box& box);
+    /** Damage the given box, in surface-local coordinates */
+    virtual void damage_surface_box(const wlr_box& box) override;
 
     /**
-     * Damage the given box after transforming it with the transformers.
-     */
-    virtual void damage_box(const wlr_box& box);
-
-    /**
-     * @return the bounding box of the view before transformers
+     * @return the bounding box of the view before transformers,
+     *  in output-local coordinates
      */
     virtual wf::geometry_t get_untransformed_bounding_box();
 

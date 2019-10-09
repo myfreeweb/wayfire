@@ -553,7 +553,11 @@ bool wf::view_interface_t::is_visible()
 
 void wf::view_interface_t::damage()
 {
-    damage_box(get_untransformed_bounding_box());
+    auto bbox = get_untransformed_bounding_box();
+    auto og = get_output_geometry();
+    bbox.x -= og.x;
+    bbox.y -= og.y;
+    damage_surface_box(bbox);
 }
 
 wlr_box wf::view_interface_t::get_minimize_hint()
@@ -1023,50 +1027,52 @@ wf::view_interface_t::~view_interface_t()
     unset_toplevel_parent(self());
 }
 
-void wf::view_interface_t::damage_box(const wlr_box& box)
+void wf::view_interface_t::damage_surface_box(const wlr_box& box)
 {
-    if (!get_output())
-        return;
-
     view_impl->offscreen_buffer.cached_damage |= box;
-    damage_raw(transform_region(box));
+    auto obox = get_output_geometry();
+
+    auto damaged = box;
+    damaged.x += obox.x;
+    damaged.y += obox.y;
+    view_damage_raw(self(), transform_region(damaged));
 }
 
-void wf::view_interface_t::damage_raw(const wlr_box& box)
+void wf::view_damage_raw(wayfire_view view, const wlr_box& box)
 {
-    if (!get_output())
+    auto output = view->get_output();
+    if (!output)
         return;
 
-    auto damage_box = get_output()->render->get_target_framebuffer().
+    auto damage_box = output->render->get_target_framebuffer().
         damage_box_from_geometry_box(box);
 
     /* shell views are visible in all workspaces. That's why we must apply
      * their damage to all workspaces as well */
-    if (role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
+    if (view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
     {
-        auto wsize = get_output()->workspace->get_workspace_grid_size();
-        auto cws = get_output()->workspace->get_current_workspace();
+        auto wsize = output->workspace->get_workspace_grid_size();
+        auto cws = output->workspace->get_current_workspace();
 
         /* Damage only the visible region of the shell view.
          * This prevents hidden panels from spilling damage onto other workspaces */
-        wlr_box ws_box = get_output()->render->get_damage_box();
-        wlr_box visible_damage = wf::geometry_intersection(damage_box, ws_box);
-
+        wlr_box ws_box = output->render->get_damage_box();
+        wlr_box visible_damage = geometry_intersection(damage_box, ws_box);
         for (int i = 0; i < wsize.width; i++)
         {
             for (int j = 0; j < wsize.height; j++)
             {
                 const int dx = (i - cws.x) * ws_box.width;
                 const int dy = (j - cws.y) * ws_box.height;
-                get_output()->render->damage(visible_damage + wf::point_t{dx, dy});
+                output->render->damage(visible_damage + wf::point_t{dx, dy});
             }
         }
     } else
     {
-        get_output()->render->damage(damage_box);
+        output->render->damage(damage_box);
     }
 
-    emit_signal("damaged-region", nullptr);
+    view->emit_signal("damaged-region", nullptr);
 }
 
 void wf::view_interface_t::destruct()
