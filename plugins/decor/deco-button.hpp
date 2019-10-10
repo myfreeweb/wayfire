@@ -5,6 +5,7 @@
 #include <wayfire/surface.hpp>
 #include <wayfire/render-manager.hpp>
 #include <wayfire/nonstd/noncopyable.hpp>
+#include <wayfire/util/duration.hpp>
 
 #include <cairo.h>
 
@@ -22,7 +23,14 @@ enum button_type_t
 class button_t : public noncopyable_t
 {
   public:
-    button_t(const decoration_theme_t& theme);
+    /**
+     * Create a new button with the given theme.
+     * @param theme  The theme to use.
+     * @param damage_callback   A callback to execute when the button needs a
+     * repaint. Damage won't be reported while render() is being called.
+     */
+    button_t(const decoration_theme_t& theme,
+        std::function<void()> damage_callback);
 
     /**
      * Set the type of the button. This will affect the displayed icon and
@@ -46,11 +54,6 @@ class button_t : public noncopyable_t
     void set_pressed(bool is_pressed);
 
     /**
-     * @return Whether the button needs to be repainted
-     */
-    bool needs_repaint();
-
-    /**
      * Render the button on the given framebuffer at the given coordinates.
      * Precondition: set_button_type() has been called, otherwise result is no-op
      *
@@ -65,9 +68,20 @@ class button_t : public noncopyable_t
     const decoration_theme_t& theme;
 
     /* Whether the button needs repaint */
-    bool damaged = false;
     button_type_t type;
     uint32_t button_texture = -1;
+
+    /* Whether the button is currently being hovered */
+    bool is_hovered = false;
+    /* Whether the button is currently being held */
+    bool is_pressed = false;
+    /* The shade of button background to use. */
+    wf::animation::simple_animation_t hover{wf::create_option(100)};
+
+    std::function<void()> damage_callback;
+    wf::wl_idle_call idle_damage;
+    /** Damage button the next time the main loop goes idle */
+    void add_idle_damage();
 
     /**
      * Redraw the button surface and store it as a texture

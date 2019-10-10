@@ -7,7 +7,7 @@ extern "C"
 #include <wlr/types/wlr_xcursor_manager.h>
 }
 
-#define BUTTON_ASPECT_RATIO 1.5
+#define BUTTON_ASPECT_RATIO (25.0/16.0)
 #define BUTTON_HEIGHT_PC 0.8
 
 namespace wf
@@ -29,11 +29,14 @@ decoration_area_t::decoration_area_t(decoration_area_type_t type, wf::geometry_t
  * Initialize a new decoration area holding a button
  */
 decoration_area_t::decoration_area_t(wf::geometry_t g,
+    std::function<void(wlr_box)> damage_callback,
     const decoration_theme_t& theme)
 {
     this->type  = DECORATION_AREA_BUTTON;
     this->geometry = g;
-    this->button = std::make_unique<button_t> (theme);
+
+    this->button = std::make_unique<button_t> (theme,
+        std::bind(damage_callback, g));
 }
 
 wf::geometry_t decoration_area_t::get_geometry() const
@@ -52,13 +55,16 @@ decoration_area_type_t decoration_area_t::get_type() const
     return type;
 }
 
-decoration_layout_t::decoration_layout_t(const decoration_theme_t& th) :
+decoration_layout_t::decoration_layout_t(const decoration_theme_t& th,
+    std::function<void(wlr_box)> callback) :
+
     titlebar_size(th.get_title_height()),
     border_size(th.get_border_size()),
     button_width(titlebar_size * BUTTON_HEIGHT_PC * BUTTON_ASPECT_RATIO),
     button_height(titlebar_size * BUTTON_HEIGHT_PC),
     button_padding((titlebar_size - button_height) / 2),
-    theme(th)
+    theme(th),
+    damage_callback(callback)
 {
     assert(titlebar_size >= border_size);
 }
@@ -77,7 +83,7 @@ void decoration_layout_t::resize(int width, int height)
     };
 
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
-            button_geometry, theme));
+            button_geometry, damage_callback, theme));
     this->layout_areas.back()->as_button().set_button_type(BUTTON_CLOSE);
 
     /* Padding around the button, allows move */
@@ -149,12 +155,29 @@ wf::region_t decoration_layout_t::calculate_region() const
     return r;
 }
 
+void decoration_layout_t::unset_hover(wf::point_t position)
+{
+    auto area = find_area_at(position);
+    if (area && area->get_type() == DECORATION_AREA_BUTTON)
+        area->as_button().set_hover(false);
+}
+
 /** Handle motion event to (x, y) relative to the decoration */
 void decoration_layout_t::handle_motion(int x, int y)
 {
+    auto previous_area = find_area_at(current_input);
+    auto current_area = find_area_at({x, y});
+    //log_info("%p %p", previous_area.get(), current_area.get());
+    if (previous_area != current_area)
+    {
+     //   log_info("unset hover");
+        unset_hover(current_input);
+        if (current_area && current_area->get_type() == DECORATION_AREA_BUTTON)
+            current_area->as_button().set_hover(true);
+    }
+
     this->current_input = {x, y};
     update_cursor();
-    /* TODO: hover */
 }
 
 /**
@@ -175,6 +198,9 @@ decoration_layout_t::handle_press_event(bool pressed)
         if (area && (area->get_type() & DECORATION_AREA_RESIZE_BIT))
             return {DECORATION_ACTION_RESIZE, calculate_resize_edges()};
 
+        if (area && area->get_type() == DECORATION_AREA_BUTTON)
+            area->as_button().set_pressed(true);
+
         is_grabbed = true;
         grab_origin = current_input;
     }
@@ -184,9 +210,10 @@ decoration_layout_t::handle_press_event(bool pressed)
         auto begin_area = find_area_at(grab_origin);
         auto end_area = find_area_at(current_input);
 
-        if (begin_area && end_area && begin_area == end_area)
+        if (begin_area && begin_area->get_type() == DECORATION_AREA_BUTTON)
         {
-            if (begin_area->get_type() == DECORATION_AREA_BUTTON)
+            begin_area->as_button().set_pressed(false);
+            if (end_area && begin_area == end_area)
             {
                 switch (begin_area->as_button().get_button_type())
                 {
@@ -245,7 +272,15 @@ void decoration_layout_t::update_cursor() const
 
 void decoration_layout_t::handle_focus_lost()
 {
-    this->is_grabbed = false;
+    if (is_grabbed)
+    {
+        this->is_grabbed = false;
+        auto area = find_area_at(grab_origin);
+        if (area && area->get_type() == DECORATION_AREA_BUTTON)
+            area->as_button().set_pressed(false);
+    }
+
+    this->unset_hover(current_input);
 }
 
 }

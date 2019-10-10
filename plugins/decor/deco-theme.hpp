@@ -38,16 +38,28 @@ class decoration_theme_t
      */
     cairo_surface_t *render_text(std::string text, int width, int height) const;
 
+    struct button_state_t
+    {
+        /** Button width */
+        int width;
+        /** Button height */
+        int height;
+        /** Button outline size */
+        int border;
+        /** Progress of button hover, in range [-1, 1].
+         * Negative numbers are usually used for pressed state. */
+        double hover_progress;
+    };
+
     /**
      * Get the icon for the given button.
      * The caller is responsible for freeing the memory afterwards.
      *
      * @param button The button type.
-     * @param width The width of the generated surface.
-     * @param height The height of the generated surface.
+     * @param state The button state.
      */
     cairo_surface_t *get_button_surface(button_type_t button,
-        int width, int height) const;
+        const button_state_t& state) const;
 
   private:
     wf::option_wrapper_t<std::string> font{"decoration/font"};

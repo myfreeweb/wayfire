@@ -101,11 +101,10 @@ cairo_surface_t *decoration_theme_t::render_text(std::string text,
  * The caller is responsible for freeing the memory afterwards.
  *
  * @param button The button type.
- * @param width The width of the generated surface.
- * @param height The height of the generated surface.
+ * @param state The button state.
  */
 cairo_surface_t *decoration_theme_t::get_button_surface(button_type_t button,
-    int width, int height) const
+    const button_state_t& state) const
 {
     cairo_surface_t *button_icon;
     switch (button)
@@ -118,21 +117,40 @@ cairo_surface_t *decoration_theme_t::get_button_surface(button_type_t button,
             assert(false);
     }
 
-    cairo_surface_t *button_surface =
-        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+    cairo_surface_t *button_surface = cairo_image_surface_create(
+        CAIRO_FORMAT_ARGB32, state.width, state.height);
     auto cr = cairo_create(button_surface);
 
     /* Clear the button background */
-    cairo_rectangle(cr, 0, 0, width, height);
+    cairo_rectangle(cr, 0, 0, state.width, state.height);
     cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     cairo_set_source_rgba(cr, 0, 0, 0, 0);
     cairo_fill(cr);
 
     /* Render button itself */
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_rectangle(cr, 0, 0, width, height);
-    cairo_scale(cr, 1.0 * width / cairo_image_surface_get_width(button_icon),
-        1.0 * height / cairo_image_surface_get_height(button_icon));
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_rectangle(cr, 0, 0, state.width, state.height);
+
+    /* Border */
+    cairo_set_line_width(cr, state.border);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+    cairo_stroke_preserve(cr);
+
+    //log_info("theme render button with %d %.2f", state.pressed, state.hover_progress);
+    /* Background */
+    wf::color_t base_background = {0.5, 0.5, 0.5, 0.7};
+    wf::color_t hover_add_background = {0.2, 0.2, 0.2, 0.2};
+    cairo_set_source_rgba(cr,
+        base_background.r + hover_add_background.r * state.hover_progress,
+        base_background.g + hover_add_background.g * state.hover_progress,
+        base_background.b + hover_add_background.b * state.hover_progress,
+        base_background.a + hover_add_background.a * state.hover_progress);
+    cairo_fill_preserve(cr);
+
+    /* Icon */
+    cairo_scale(cr,
+        1.0 * state.width / cairo_image_surface_get_width(button_icon),
+        1.0 * state.height / cairo_image_surface_get_height(button_icon));
     cairo_set_source_surface(cr, button_icon, 0, 0);
     cairo_fill(cr);
 
