@@ -184,9 +184,6 @@ static void wlr_log_handler(wlr_log_importance level,
 
 int main(int argc, char *argv[])
 {
-
-    stderr = freopen("/tmp/fire.log", "w", stderr);
-
 #ifdef WAYFIRE_DEBUG_ENABLED
     wlr_log_init(WLR_DEBUG, wlr_log_handler);
     wf::log::initialize_logging(std::cout, wf::log::LOG_LEVEL_DEBUG,
