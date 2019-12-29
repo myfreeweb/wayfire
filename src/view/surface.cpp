@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <map>
+#include <wayfire/debug.hpp>
 extern "C"
 {
 #include <wlr/types/wlr_surface.h>
