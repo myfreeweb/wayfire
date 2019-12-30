@@ -366,7 +366,20 @@ class wayfire_move : public wf::plugin_interface_t
         wf::point_t get_input_coords()
         {
             auto og = output->get_layout_geometry();
-            return get_global_input_coords() - wf::point_t{og.x, og.y};
+            auto coords = get_global_input_coords() - wf::point_t{og.x, og.y};
+
+            /* If the currently moved view is not a toplevel view, but a child
+             * view, do not move it outside its outpup */
+            if (view && view->parent)
+            {
+                double x = coords.x;
+                double y = coords.y;
+                auto local = output->get_relative_geometry();
+                wlr_box_closest_point(&local, x, y, &x, &y);
+                coords = {(int)x, (int)y};
+            }
+
+            return coords;
         }
 
         /* Moves the view to another output and sends a move request */
