@@ -15,7 +15,6 @@
 
 #include "snap_signal.hpp"
 #include "move-snap-helper.hpp"
-#include "../wobbly/wobbly-signal.hpp"
 #include "../common/preview-indication.hpp"
 
 class wf_move_mirror_view : public wf::mirror_view_t
