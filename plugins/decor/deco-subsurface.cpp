@@ -203,7 +203,17 @@ class simple_decoration_surface : public wf::surface_interface_t,
             case wf::decor::DECORATION_ACTION_RESIZE:
                 return send_resize_request(action.edges);
             case wf::decor::DECORATION_ACTION_CLOSE:
-                view->close();
+                return view->close();
+            case wf::decor::DECORATION_ACTION_TOGGLE_MAXIMIZE:
+                if (view->tiled_edges) {
+                    view->tile_request(0);
+                } else {
+                    view->tile_request(wf::TILED_EDGES_ALL);
+                }
+                break;
+            case wf::decor::DECORATION_ACTION_MINIMIZE:
+                view->minimize_request(true);
+                break;
             default:
                 break;
         }

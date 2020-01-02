@@ -1,6 +1,7 @@
 #include "deco-layout.hpp"
 #include "deco-theme.hpp"
 #include <wayfire/core.hpp>
+#include <wayfire/nonstd/reverse.hpp>
 
 extern "C"
 {
@@ -69,30 +70,51 @@ decoration_layout_t::decoration_layout_t(const decoration_theme_t& th,
     assert(titlebar_size >= border_size);
 }
 
-/** Regenerate layout using the new size */
-void decoration_layout_t::resize(int width, int height)
+wf::geometry_t decoration_layout_t::create_buttons(int width, int)
 {
-    this->layout_areas.clear();
+    std::stringstream stream((std::string)button_order);
+    std::vector<button_type_t> buttons;
+    std::string button_name;
+    while (stream >> button_name)
+    {
+        if (button_name == "minimize")
+            buttons.push_back(BUTTON_MINIMIZE);
+        if (button_name == "maximize")
+            buttons.push_back(BUTTON_TOGGLE_MAXIMIZE);
+        if (button_name == "close")
+            buttons.push_back(BUTTON_CLOSE);
+    }
 
-    /* Close button */
+    int per_button = 2 * button_padding + button_width;
     wf::geometry_t button_geometry = {
-        width - border_size - button_padding - button_width,
+        width - border_size + button_padding, /* 1 more padding initially */
         button_padding + border_size,
         button_width,
         button_height,
     };
 
-    this->layout_areas.push_back(std::make_unique<decoration_area_t>(
-            button_geometry, damage_callback, theme));
-    this->layout_areas.back()->as_button().set_button_type(BUTTON_CLOSE);
+    for (auto type : wf::reverse(buttons))
+    {
+        button_geometry.x -= per_button;
+        this->layout_areas.push_back(std::make_unique<decoration_area_t>(
+                button_geometry, damage_callback, theme));
+        this->layout_areas.back()->as_button().set_button_type(type);
+    }
+
+    int total_width = -button_padding + buttons.size() * per_button;
+    return {
+        button_geometry.x, border_size,
+        total_width, titlebar_size
+    };
+}
+
+/** Regenerate layout using the new size */
+void decoration_layout_t::resize(int width, int height)
+{
+    this->layout_areas.clear();
+    auto button_geometry_expanded = create_buttons(width, height);
 
     /* Padding around the button, allows move */
-    wf::geometry_t button_geometry_expanded = {
-        button_geometry.x - button_padding,
-        border_size,
-        button_geometry.width + 2 * button_padding,
-        titlebar_size
-    };
     this->layout_areas.push_back(std::make_unique<decoration_area_t> (
             DECORATION_AREA_MOVE, button_geometry_expanded));
 
@@ -167,10 +189,8 @@ void decoration_layout_t::handle_motion(int x, int y)
 {
     auto previous_area = find_area_at(current_input);
     auto current_area = find_area_at({x, y});
-    //log_info("%p %p", previous_area.get(), current_area.get());
     if (previous_area != current_area)
     {
-     //   log_info("unset hover");
         unset_hover(current_input);
         if (current_area && current_area->get_type() == DECORATION_AREA_BUTTON)
             current_area->as_button().set_hover(true);
@@ -219,6 +239,10 @@ decoration_layout_t::handle_press_event(bool pressed)
                 {
                     case BUTTON_CLOSE:
                         return {DECORATION_ACTION_CLOSE, 0};
+                    case BUTTON_TOGGLE_MAXIMIZE:
+                        return {DECORATION_ACTION_TOGGLE_MAXIMIZE, 0};
+                    case BUTTON_MINIMIZE:
+                        return {DECORATION_ACTION_MINIMIZE, 0};
                     default:
                         break;
                 }

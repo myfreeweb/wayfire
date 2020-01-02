@@ -18,6 +18,8 @@ class decoration_theme_t;
 enum button_type_t
 {
     BUTTON_CLOSE,
+    BUTTON_TOGGLE_MAXIMIZE,
+    BUTTON_MINIMIZE,
 };
 
 class button_t : public noncopyable_t

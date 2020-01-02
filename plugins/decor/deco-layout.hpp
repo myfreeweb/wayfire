@@ -83,9 +83,9 @@ enum decoration_layout_action_t
     DECORATION_ACTION_RESIZE   = 2,
 
     /* Button actions */
-    DECORATION_ACTION_CLOSE    = 3,
-    DECORATION_ACTION_MAXIMIZE = 4,
-    DECORATION_ACTION_MINIMIZE = 5,
+    DECORATION_ACTION_CLOSE           = 3,
+    DECORATION_ACTION_TOGGLE_MAXIMIZE = 4,
+    DECORATION_ACTION_MINIMIZE        = 5,
 };
 
 class decoration_theme_t;
@@ -163,6 +163,9 @@ class decoration_layout_t
     /* Last position of the input */
     wf::point_t current_input;
 
+    /** Create buttons in the layout, and return their total geometry */
+    wf::geometry_t create_buttons(int width, int height);
+
     /** Calculate resize edges based on @current_input */
     uint32_t calculate_resize_edges() const;
     /** Update the cursor based on @current_input */
@@ -176,6 +179,7 @@ class decoration_layout_t
 
     /** Unset hover state of hovered button at @position, if any */
     void unset_hover(wf::point_t position);
+    wf::option_wrapper_t<std::string> button_order{"decoration/button_order"};
 };
 }
 }

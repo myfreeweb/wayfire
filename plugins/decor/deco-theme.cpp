@@ -107,16 +107,24 @@ cairo_surface_t *decoration_theme_t::get_button_surface(button_type_t button,
     const button_state_t& state) const
 {
     cairo_surface_t *button_icon;
+    std::string resource_path =
+        INSTALL_PREFIX "/share/wayfire/decoration/resources/";
     switch (button)
     {
         case BUTTON_CLOSE:
-            button_icon = cairo_image_surface_create_from_png(
-                INSTALL_PREFIX "/share/wayfire/decoration/resources/close.png");
+            resource_path += "close.png";
+            break;
+        case BUTTON_TOGGLE_MAXIMIZE:
+            resource_path += "maximize.png";
+            break;
+        case BUTTON_MINIMIZE:
+            resource_path += "minimize.png";
             break;
         default:
             assert(false);
     }
 
+    button_icon = cairo_image_surface_create_from_png(resource_path.c_str());
     cairo_surface_t *button_surface = cairo_image_surface_create(
         CAIRO_FORMAT_ARGB32, state.width, state.height);
     auto cr = cairo_create(button_surface);
