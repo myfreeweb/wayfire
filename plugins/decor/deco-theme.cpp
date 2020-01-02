@@ -2,6 +2,7 @@
 #include <wayfire/core.hpp>
 #include <wayfire/opengl.hpp>
 #include <config.h>
+#include <map>
 
 extern "C"
 {
@@ -96,17 +97,48 @@ cairo_surface_t *decoration_theme_t::render_text(std::string text,
     return surface;
 }
 
-/**
- * Get the icon for the given button.
- * The caller is responsible for freeing the memory afterwards.
- *
- * @param button The button type.
- * @param state The button state.
- */
+static struct icon_cache_t : public noncopyable_t
+{
+    ~icon_cache_t()
+    {
+        for (auto& icon : cached_icons)
+            cairo_surface_destroy(icon.second);
+    }
+
+    std::map<wf::decor::button_type_t, cairo_surface_t*> cached_icons;
+    cairo_surface_t *load_icon(wf::decor::button_type_t type)
+    {
+        if (cached_icons.count(type) == 0)
+        {
+            std::string resource_path =
+                INSTALL_PREFIX "/share/wayfire/decoration/resources/";
+            switch (type)
+            {
+                case BUTTON_CLOSE:
+                    resource_path += "close.png";
+                    break;
+                case BUTTON_TOGGLE_MAXIMIZE:
+                    resource_path += "maximize.png";
+                    break;
+                case BUTTON_MINIMIZE:
+                    resource_path += "minimize.png";
+                    break;
+                default:
+                    assert(false);
+            }
+
+            cached_icons[type] =
+                cairo_image_surface_create_from_png(resource_path.c_str());
+        }
+
+        return cached_icons[type];
+    }
+} cache;
+
 cairo_surface_t *decoration_theme_t::get_button_surface(button_type_t button,
     const button_state_t& state) const
 {
-    cairo_surface_t *button_icon;
+    cairo_surface_t *button_icon = cache.load_icon(button);
     std::string resource_path =
         INSTALL_PREFIX "/share/wayfire/decoration/resources/";
     switch (button)
