@@ -90,7 +90,7 @@ class vswitch : public wf::plugin_interface_t
         output->add_activator(binding_win_down,  &callback_win_down);
 
         animation = vswitch_animation_t{
-            wf::option_wrapper_t<int> {"vswitch/duration"}.raw_option};
+            wf::option_wrapper_t<int> {"vswitch/duration"}};
         output->connect_signal("set-workspace-request", &on_set_workspace_request);
     }
 
