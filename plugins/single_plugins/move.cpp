@@ -15,7 +15,6 @@
 
 #include "snap_signal.hpp"
 #include "move-snap-helper.hpp"
-#include "../wobbly/wobbly-signal.hpp"
 #include "../common/preview-indication.hpp"
 
 class wf_move_mirror_view : public wf::mirror_view_t
@@ -64,6 +63,7 @@ class wayfire_move : public wf::plugin_interface_t
     wayfire_view view;
 
     wf::option_wrapper_t<bool> enable_snap{"move/enable_snap"};
+    wf::option_wrapper_t<bool> join_views{"move/join_views"};
     wf::option_wrapper_t<int> snap_threshold{"move/snap_threshold"};
     wf::option_wrapper_t<wf::buttonbinding_t> activate_button{"move/activate"};
 
@@ -90,7 +90,7 @@ class wayfire_move : public wf::plugin_interface_t
                 was_client_request = false;
                 auto view = wf::get_core().get_cursor_focus_view();
 
-                if (view && view->role != wf::VIEW_ROLE_SHELL_VIEW)
+                if (view && view->role != wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
                     return initiate(view);
 
                 return false;
@@ -102,7 +102,7 @@ class wayfire_move : public wf::plugin_interface_t
                 was_client_request = false;
                 auto view = wf::get_core().get_touch_focus_view();
 
-                if (view && view->role != wf::VIEW_ROLE_SHELL_VIEW)
+                if (view && view->role != wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
                     return initiate(view);
 
                 return false;
@@ -184,6 +184,9 @@ class wayfire_move : public wf::plugin_interface_t
             if (!view || !view->is_mapped())
                 return false;
 
+            while (view->parent && join_views)
+                view = view->parent;
+
             auto current_ws_impl =
                 output->workspace->get_workspace_implementation();
             if (!current_ws_impl->view_movable(view))
@@ -242,7 +245,7 @@ class wayfire_move : public wf::plugin_interface_t
             delete_mirror_views(true);
 
             /* Don't do snapping, etc for shell views */
-            if (view->role == wf::VIEW_ROLE_SHELL_VIEW)
+            if (view->role == wf::VIEW_ROLE_DESKTOP_ENVIRONMENT)
             {
                 this->view = nullptr;
                 return;
@@ -362,7 +365,20 @@ class wayfire_move : public wf::plugin_interface_t
         wf::point_t get_input_coords()
         {
             auto og = output->get_layout_geometry();
-            return get_global_input_coords() - wf::point_t{og.x, og.y};
+            auto coords = get_global_input_coords() - wf::point_t{og.x, og.y};
+
+            /* If the currently moved view is not a toplevel view, but a child
+             * view, do not move it outside its outpup */
+            if (view && view->parent)
+            {
+                double x = coords.x;
+                double y = coords.y;
+                auto local = output->get_relative_geometry();
+                wlr_box_closest_point(&local, x, y, &x, &y);
+                coords = {(int)x, (int)y};
+            }
+
+            return coords;
         }
 
         /* Moves the view to another output and sends a move request */
@@ -466,11 +482,18 @@ class wayfire_move : public wf::plugin_interface_t
          * mirror views of the view being moved, while fading them in and out when needed */
         void update_multi_output()
         {
+            /* We are not in the join_view mode, so we can move dialogues
+             * independently of their main view. However, we do not support
+             * moving dialogues to a different output than their main view. */
+            if (this->view && this->view->parent)
+                return;
+
             /* The mouse isn't on our output anymore -> transfer ownership of
              * the move operation to the other output where the input currently is */
             auto global = get_global_input_coords();
             auto target_output =
                 wf::get_core().output_layout->get_output_at(global.x, global.y);
+
             if (target_output != output)
             {
                 /* The move plugin on the next output will create new mirror views */

@@ -580,8 +580,14 @@ class wf_wobbly : public wf::view_transformer_t
         return result;
     }
 
-    virtual wf::pointf_t local_to_transformed_point(wf::geometry_t view, wf::pointf_t point) { return {0, 0}; }
-    virtual wf::pointf_t transformed_to_local_point(wf::geometry_t view, wf::pointf_t point)
+    virtual wf::pointf_t local_to_transformed_point(
+        wf::geometry_t view, wf::pointf_t point)
+    {
+        return point;
+    }
+
+    virtual wf::pointf_t transformed_to_local_point(
+        wf::geometry_t view, wf::pointf_t point)
     {
         return point;
     }

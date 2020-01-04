@@ -25,10 +25,17 @@ class move_snap_helper_t : public wf::custom_data_t
     /* TODO: figure out where to put these options */
     wf::option_wrapper_t<bool> enable_snap_off{"move/enable_snap_off"};
     wf::option_wrapper_t<int> snap_off_threshold{"move/snap_off_threshold"};
+    wf::option_wrapper_t<bool> join_views{"move/join_views"};
 
     bool view_in_slot; /* Whether the view is held at its original position */
     double px, py; /* Percentage of the view width/height from the grab point
                       to its upper-left corner */
+
+    std::vector<wayfire_view> enum_views(wayfire_view view)
+    {
+        if (join_views) return view->enumerate_views();
+        else return {view};
+    }
 
   public:
     move_snap_helper_t(wayfire_view view, wf::point_t grab)
@@ -38,7 +45,8 @@ class move_snap_helper_t : public wf::custom_data_t
         this->last_grabbing_position = grab;
 
         view_in_slot = should_enable_snap_off();
-        start_wobbly(view, grab.x, grab.y);
+        for (auto v : enum_views(view))
+            start_wobbly(v, grab.x, grab.y);
 
         auto wmg = view->get_wm_geometry();
         px = 1.0 * (grab.x - wmg.x) / wmg.width;
@@ -62,7 +70,8 @@ class move_snap_helper_t : public wf::custom_data_t
      */
     virtual void handle_motion(wf::point_t to)
     {
-        move_wobbly(view, to.x, to.y);
+        for (auto v : enum_views(view))
+            move_wobbly(v, to.x, to.y);
 
         double distance = std::sqrt((to.x - grab.x) * (to.x - grab.x) +
             (to.y - grab.y) * (to.y - grab.y));
@@ -84,7 +93,8 @@ class move_snap_helper_t : public wf::custom_data_t
      */
     virtual void handle_input_released()
     {
-        end_wobbly(view);
+        for (auto v : enum_views(view))
+            end_wobbly(v);
     }
 
     /** @return Whether the view is freely moving or stays at the same place */

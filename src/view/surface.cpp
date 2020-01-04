@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <map>
+#include <wayfire/debug.hpp>
 extern "C"
 {
 #include <wlr/types/wlr_surface.h>
@@ -179,6 +180,11 @@ wl_client* wf::surface_interface_t::get_client()
         return wl_resource_get_client(priv->wsurface->resource);
 
     return nullptr;
+}
+
+wlr_surface *wf::surface_interface_t::get_wlr_surface()
+{
+    return priv->wsurface;
 }
 
 wf::wlr_surface_base_t::wlr_surface_base_t(surface_interface_t *self)
@@ -378,7 +384,7 @@ void wf::wlr_surface_base_t::_wlr_render_box(
     wlr_matrix_projection(scissor_proj, fb.viewport_width, fb.viewport_height,
         WL_OUTPUT_TRANSFORM_NORMAL);
 
-    float col[4] = {0, 0.2, 0, 0.5};
+    float col[4] = {(std::rand() % 5) / 5, 0.2, 0, 0.5};
     wlr_render_rect(wf::get_core().renderer, &scissor, col, scissor_proj);
 #endif
 

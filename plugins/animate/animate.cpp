@@ -98,7 +98,12 @@ class wayfire_animation : public wf::plugin_interface_t
 {
     wf::option_wrapper_t<std::string> open_animation{"animate/open_animation"};
     wf::option_wrapper_t<std::string> close_animation{"animate/close_animation"};
-    wf::option_wrapper_t<int> duration{"animate/duration"};
+
+    wf::option_wrapper_t<int> default_duration{"animate/duration"};
+    wf::option_wrapper_t<int> fade_duration{"animate/fade_duration"};
+    wf::option_wrapper_t<int> zoom_duration{"animate/zoom_duration"};
+    wf::option_wrapper_t<int> fire_duration{"animate/fire_duration"};
+
     wf::option_wrapper_t<int> startup_duration{"animate/startup_duration"};
     wf::option_wrapper_t<std::string> animation_enabled_for{"animate/enabled_for"};
     wf::option_wrapper_t<std::string> fade_enabled_for{"animate/fade_enabled_for"};
@@ -126,7 +131,14 @@ class wayfire_animation : public wf::plugin_interface_t
         fire_enabled_matcher = wf::matcher::get_matcher(fire_enabled_for);
     }
 
-    std::string get_animation_for_view(wf::option_wrapper_t<std::string>& anim_type, wayfire_view view)
+    struct view_animation_t
+    {
+        std::string animation_name;
+        int duration;
+    };
+
+    view_animation_t get_animation_for_view(
+        wf::option_wrapper_t<std::string>& anim_type, wayfire_view view)
     {
         /* Determine the animation for the given view.
          * Note that the matcher plugin might not have been loaded, so
@@ -134,25 +146,26 @@ class wayfire_animation : public wf::plugin_interface_t
         if (animation_enabled_matcher)
         {
             if (wf::matcher::evaluate(fade_enabled_matcher, view))
-                return "fade";
+                return {"fade", fade_duration};
             if (wf::matcher::evaluate(zoom_enabled_matcher, view))
-                return "zoom";
+                return {"zoom", zoom_duration};
             if (wf::matcher::evaluate(fire_enabled_matcher, view))
-                return "fire";
+                return {"fire", fire_duration};
             if (wf::matcher::evaluate(animation_enabled_matcher, view))
-                return anim_type;
+                return {anim_type, default_duration};
         }
         else if (view->role == wf::VIEW_ROLE_TOPLEVEL ||
             (view->role == wf::VIEW_ROLE_UNMANAGED && view->is_focuseable()))
         {
-            return anim_type;
+            return {anim_type, default_duration};
         }
 
-        return "none";
+        return {"none", 0};
     }
 
     template<class animation_t>
-        void set_animation(wayfire_view view, wf_animation_type type)
+        void set_animation(wayfire_view view,
+            wf_animation_type type, int duration)
     {
         view->store_data(
             std::make_unique<animation_hook<animation_t>> (view, duration, type),
@@ -166,12 +179,12 @@ class wayfire_animation : public wf::plugin_interface_t
         auto view = get_signaled_view(ddata);
         auto animation = get_animation_for_view(open_animation, view);
 
-        if (animation == "fade")
-            set_animation<fade_animation> (view, ANIMATION_TYPE_MAP);
-        else if (animation == "zoom")
-            set_animation<zoom_animation> (view, ANIMATION_TYPE_MAP);
-        else if (animation == "fire")
-            set_animation<FireAnimation> (view, ANIMATION_TYPE_MAP);
+        if (animation.animation_name == "fade")
+            set_animation<fade_animation> (view, ANIMATION_TYPE_MAP, animation.duration);
+        else if (animation.animation_name == "zoom")
+            set_animation<zoom_animation> (view, ANIMATION_TYPE_MAP, animation.duration);
+        else if (animation.animation_name == "fire")
+            set_animation<FireAnimation> (view, ANIMATION_TYPE_MAP, animation.duration);
     };
 
     wf::signal_callback_t on_view_unmapped = [=] (wf::signal_data_t *data)
@@ -179,22 +192,27 @@ class wayfire_animation : public wf::plugin_interface_t
         auto view = get_signaled_view(data);
         auto animation = get_animation_for_view(close_animation, view);
 
-        if (animation == "fade")
-            set_animation<fade_animation> (view, ANIMATION_TYPE_UNMAP);
-        else if (animation == "zoom")
-            set_animation<zoom_animation> (view, ANIMATION_TYPE_UNMAP);
-        else if (animation == "fire")
-            set_animation<FireAnimation> (view, ANIMATION_TYPE_UNMAP);
+        if (animation.animation_name == "fade")
+            set_animation<fade_animation> (view, ANIMATION_TYPE_UNMAP, animation.duration);
+        else if (animation.animation_name == "zoom")
+            set_animation<zoom_animation> (view, ANIMATION_TYPE_UNMAP, animation.duration);
+        else if (animation.animation_name == "fire")
+            set_animation<FireAnimation> (view, ANIMATION_TYPE_UNMAP, animation.duration);
     };
 
     wf::signal_callback_t on_minimize_request = [=] (wf::signal_data_t *data)
     {
         auto ev = static_cast<view_minimize_request_signal*> (data);
-        if (ev->state) {
+        if (ev->state)
+        {
             ev->carried_out = true;
-            set_animation<zoom_animation>(ev->view, ANIMATION_TYPE_MINIMIZE);
-        } else {
-            set_animation<zoom_animation> (ev->view, ANIMATION_TYPE_RESTORE);
+            set_animation<zoom_animation>(
+                ev->view, ANIMATION_TYPE_MINIMIZE, default_duration);
+        }
+        else
+        {
+            set_animation<zoom_animation>(
+                ev->view, ANIMATION_TYPE_RESTORE, default_duration);
         }
     };
 

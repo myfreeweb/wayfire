@@ -18,7 +18,7 @@ class surface_interface_t::impl
     surface_interface_t* parent_surface;
     std::vector<surface_interface_t*> surface_children;
 
-    wf::output_t *output;
+    wf::output_t *output = nullptr;
     int ref_cnt = 0;
 
     static int active_shrink_constraint;
@@ -85,8 +85,8 @@ class wlr_surface_base_t
 };
 
 /**
- * wlr_child_surface_base_t is a base class for wlr-surface based child surfaces,
- * i.e popups, subsurfaces, etc.
+ * wlr_child_surface_base_t is a base class for wlr-surface based child
+ * surfaces, i.e subsurfaces.
  *
  * However, they can still exist without a parent, for ex. drag icons.
  */
