@@ -26,16 +26,6 @@ void wf::wlr_view_t::set_role(view_role_t new_role)
         destroy_toplevel();
 }
 
-void wf::wlr_view_t::damage_surface_box(const wlr_box& box)
-{
-    auto obox = get_output_geometry();
-
-    auto damaged = box;
-    damaged.x += obox.x;
-    damaged.y += obox.y;
-    damage_box(damaged);
-}
-
 void wf::wlr_view_t::handle_app_id_changed(std::string new_app_id)
 {
     this->app_id = new_app_id;
@@ -127,7 +117,7 @@ void wf::wlr_view_t::set_position(int x, int y,
     data.view = self();
     data.old_geometry = old_geometry;
 
-    damage_raw(last_bounding_box);
+    view_damage_raw(self(), last_bounding_box);
     /* obox.x - wm.x is the current difference in the output and wm geometry */
     geometry.x = x + obox.x - wm.x;
     geometry.y = y + obox.y - wm.y;
@@ -181,7 +171,7 @@ void wf::wlr_view_t::update_size()
     }
 
     /* Damage current size */
-    damage_raw(last_bounding_box);
+    view_damage_raw(self(), last_bounding_box);
     adjust_anchored_edge(current_size);
 
     view_geometry_changed_signal data;
@@ -193,7 +183,7 @@ void wf::wlr_view_t::update_size()
 
     /* Damage new size */
     last_bounding_box = get_bounding_box();
-    damage_raw(last_bounding_box);
+    view_damage_raw(self(), last_bounding_box);
     emit_signal("geometry-changed", &data);
 
     if (view_impl->frame)

@@ -194,6 +194,25 @@ wlr_surface *wf::surface_interface_t::get_wlr_surface()
     return priv->wsurface;
 }
 
+void wf::surface_interface_t::damage_surface_region(
+    const wf::region_t& dmg)
+{
+    for (const auto& rect : dmg)
+        damage_surface_box(wlr_box_from_pixman_box(rect));
+}
+
+void wf::surface_interface_t::damage_surface_box(const wlr_box& box)
+{
+    /* wlr_view_t overrides damage_surface_box and applies it to the output */
+    if (priv->parent_surface && priv->parent_surface->is_mapped())
+    {
+        wlr_box parent_box = box;
+        parent_box.x += get_offset().x;
+        parent_box.y += get_offset().y;
+        priv->parent_surface->damage_surface_box(parent_box);
+    }
+}
+
 wf::wlr_surface_base_t::wlr_surface_base_t(surface_interface_t *self)
 {
     _as_si = self;
@@ -284,7 +303,7 @@ void wf::wlr_surface_base_t::unmap()
 {
     assert(this->surface);
     apply_surface_damage();
-    damage_surface_box({.x = 0, .y = 0,
+    _as_si->damage_surface_box({.x = 0, .y = 0,
         .width = _get_size().width, .height = _get_size().height});
 
     this->surface->data = NULL;
@@ -305,28 +324,6 @@ wlr_buffer* wf::wlr_surface_base_t::get_buffer()
     return nullptr;
 }
 
-void wf::wlr_surface_base_t::damage_surface_region(
-    const wf::region_t& dmg)
-{
-    for (const auto& rect : dmg)
-        damage_surface_box(wlr_box_from_pixman_box(rect));
-}
-
-void wf::wlr_surface_base_t::damage_surface_box(const wlr_box& box)
-{
-    auto parent =
-        dynamic_cast<wlr_surface_base_t*> (_as_si->priv->parent_surface);
-
-    /* wlr_view_t overrides damage_surface_box and applies it to the output */
-    if (parent && parent->_is_mapped())
-    {
-        wlr_box parent_box = box;
-        parent_box.x += _as_si->get_offset().x;
-        parent_box.y += _as_si->get_offset().y;
-        parent->damage_surface_box(parent_box);
-    }
-}
-
 void wf::wlr_surface_base_t::apply_surface_damage()
 {
     if (!_as_si->get_output() || !_is_mapped())
@@ -339,7 +336,7 @@ void wf::wlr_surface_base_t::apply_surface_damage()
         surface->current.scale != _as_si->get_output()->handle->scale)
         dmg.expand_edges(1);
 
-    damage_surface_region(dmg);
+    _as_si->damage_surface_region(dmg);
 }
 
 void wf::wlr_surface_base_t::commit()

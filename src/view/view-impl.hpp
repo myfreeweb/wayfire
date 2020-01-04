@@ -67,6 +67,17 @@ class view_interface_t::view_priv_impl
 };
 
 /**
+ * Damage the given box, assuming the damage belongs to the given view.
+ * The given box is assumed to have been transformed with the view's
+ * transformers.
+ *
+ * The main difference with directly damaging the output is that this will
+ * add the damage to all workspaces the view is visible on, in case of shell
+ * views.
+ */
+void view_damage_raw(wayfire_view view, const wlr_box& box);
+
+/**
  * Implementation of a view backed by a wlr_* shell struct.
  */
 class wlr_view_t :
@@ -87,7 +98,6 @@ class wlr_view_t :
     /* Subtract the opaque region of the surface from region, supposing
      * the surface is positioned at (x, y) */
     virtual void subtract_opaque(wf::region_t& region, int x, int y) override final;
-    virtual void damage_surface_box(const wlr_box& box) override final;
 
     /* Functions which are further specialized for the different shells */
     virtual void move(int x, int y) override;
