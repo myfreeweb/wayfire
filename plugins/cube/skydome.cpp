@@ -8,6 +8,7 @@
 
 
 #include <glm/gtc/matrix_transform.hpp>
+#include "shaders.tpp"
 
 #define SKYDOME_GRID_WIDTH 128
 #define SKYDOME_GRID_HEIGHT 128
@@ -22,24 +23,14 @@ wf_cube_background_skydome::wf_cube_background_skydome(wf::output_t *output)
 wf_cube_background_skydome::~wf_cube_background_skydome()
 {
     OpenGL::render_begin();
-    GL_CALL(glDeleteProgram(program));
+    program.deactivate();
     OpenGL::render_end();
 }
 
 void wf_cube_background_skydome::load_program()
 {
     OpenGL::render_begin();
-
-    std::string shader_path = INSTALL_PREFIX "/share/wayfire/cube/shaders_2.0";
-
-    program = OpenGL::create_program(
-        shader_path + "/vertex.glsl", shader_path + "/frag.glsl");
-
-    vpID    = GL_CALL(glGetUniformLocation(program, "VP"));
-    modelID = GL_CALL(glGetUniformLocation(program, "model"));
-    uvID  = GL_CALL(glGetAttribLocation(program, "uvPosition"));
-    posID = GL_CALL(glGetAttribLocation(program, "position"));
-
+    program.set_simple(OpenGL::compile_program(cube_vertex_2_0, cube_fragment_2_0));
     OpenGL::render_end();
 }
 
@@ -146,11 +137,7 @@ void wf_cube_background_skydome::render_frame(const wf::framebuffer_t& fb,
     }
 
     OpenGL::render_begin(fb);
-
-    GL_CALL(glUseProgram(program));
-
-    GL_CALL(glEnableVertexAttribArray(posID));
-    GL_CALL(glEnableVertexAttribArray(uvID));
+    program.use(wf::TEXTURE_TYPE_RGBA);
 
     auto rotation = glm::rotate(glm::mat4(1.0),
         (float) (attribs.cube_animation.offset_y * 0.5),
@@ -161,18 +148,17 @@ void wf_cube_background_skydome::render_frame(const wf::framebuffer_t& fb,
         glm::vec3(0., 1., 0.));
 
     auto vp = fb.transform * attribs.projection * view * rotation;
+    program.uniformMatrix4f("VP", vp);
 
-    GL_CALL(glUniformMatrix4fv(vpID, 1, GL_FALSE, &vp[0][0]));
-
-    GL_CALL(glVertexAttribPointer(posID, 3, GL_FLOAT, GL_FALSE, 0, vertices.data()));
-    GL_CALL(glVertexAttribPointer(uvID, 2, GL_FLOAT, GL_FALSE, 0, coords.data()));
+    program.attrib_pointer("position", 3, 0, vertices.data());
+    program.attrib_pointer("uvPosition", 2, 0, coords.data());
 
     auto cws = output->workspace->get_current_workspace();
     auto model = glm::rotate(glm::mat4(1.0),
         float(attribs.cube_animation.rotation) - cws.x * attribs.side_angle,
         glm::vec3(0, 1, 0));
 
-    GL_CALL(glUniformMatrix4fv(modelID, 1, GL_FALSE, &model[0][0]));
+    program.uniformMatrix4f("model", model);
 
     GL_CALL(glActiveTexture(GL_TEXTURE0));
     GL_CALL(glBindTexture(GL_TEXTURE_2D, tex));
@@ -181,7 +167,6 @@ void wf_cube_background_skydome::render_frame(const wf::framebuffer_t& fb,
             6 * SKYDOME_GRID_WIDTH * (SKYDOME_GRID_HEIGHT - 2),
             GL_UNSIGNED_INT, indices.data()));
 
-    GL_CALL(glDisableVertexAttribArray(posID));
-    GL_CALL(glDisableVertexAttribArray(uvID));
+    program.deactivate();
     OpenGL::render_end();
 }

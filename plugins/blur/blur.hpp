@@ -97,11 +97,10 @@ class wf_blur_base
      * destructor */
     wf::framebuffer_base_t fb[2];
     /* the program created by the given algorithm, cleaned up in base destructor */
-    GLuint program[2];
+    OpenGL::program_t program[2];
     /* the program used by wf_blur_base to combine the blurred, unblurred and
      * view texture */
-    GLuint blend_program;
-    GLuint blend_posID, blend_mvpID, blend_texID[2];
+    OpenGL::program_t blend_program;
 
     /* used to get individual algorithm options from config
      * should be set by the constructor */
@@ -136,11 +135,11 @@ class wf_blur_base
     virtual int calculate_blur_radius();
     void damage_all_workspaces();
 
-    virtual void pre_render(uint32_t src_tex, wlr_box src_box,
+    virtual void pre_render(wf::texture_t src_tex, wlr_box src_box,
         const wf::region_t& damage, const wf::framebuffer_t& target_fb);
 
-    virtual void render(uint32_t src_tex, wlr_box src_box, wlr_box scissor_box,
-        const wf::framebuffer_t& target_fb);
+    virtual void render(wf::texture_t src_tex, wlr_box src_box,
+        wlr_box scissor_box, const wf::framebuffer_t& target_fb);
 };
 
 std::unique_ptr<wf_blur_base> create_box_blur(wf::output_t *output);

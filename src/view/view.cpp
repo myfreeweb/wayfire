@@ -264,13 +264,15 @@ wf::pointf_t wf::view_interface_t::global_to_local_point(const wf::pointf_t& arg
     if (view_impl->transforms.size())
     {
         auto box = get_untransformed_bounding_box();
+        /* FIXME: bounding box is not computed properly!!! It should be
+         * reverse */
         view_impl->transforms.for_each_reverse([&] (auto& tr)
         {
             if (INVALID_COORDS(result))
                 return;
 
             auto& transform = tr->transform;
-            result = transform->transformed_to_local_point(box, result);
+            result = transform->untransform_point(box, result);
             box = transform->get_bounding_box(box, box);
         });
 
@@ -766,7 +768,7 @@ wf::pointf_t wf::view_interface_t::transform_point(const wf::pointf_t& point)
 
     view_impl->transforms.for_each([&] (auto& tr)
     {
-        result = tr->transform->local_to_transformed_point(view, result);
+        result = tr->transform->transform_point(view, result);
         view = tr->transform->get_bounding_box(view, view);
     });
 
@@ -793,22 +795,66 @@ bool wf::view_interface_t::intersects_region(const wlr_box& region)
     return false;
 }
 
+void wf::view_interface_t::subtract_transformed_opaque(
+    wf::region_t& region, int x, int y)
+{
+    if (!is_mapped())
+        return;
+
+    /*
+     * We want to figure out the union of opaque regions.
+     *
+     * So, we first subtract all opaque regions from the full region, and then
+     * invert it.
+     */
+    auto obox = get_untransformed_bounding_box();
+    auto og = get_output_geometry();
+
+    float scale = get_output()->handle->scale;
+
+    wf::region_t full = obox;
+    full *= scale;
+    wf::region_t opaque = full;
+    for (auto& surf : enumerate_surfaces({og.x, og.y}))
+        surf.surface->subtract_opaque(opaque, surf.position.x, surf.position.y);
+
+    opaque = full ^ opaque;
+    opaque *= 1.0 / scale;
+    auto bbox = obox;
+    this->view_impl->transforms.for_each(
+        [&] (const std::shared_ptr<view_transform_block_t> tr) {
+            opaque = tr->transform->transform_opaque_region(bbox, opaque);
+            bbox = tr->transform->get_bounding_box(bbox, bbox);
+        });
+
+    opaque += -wf::point_t{x, y};
+    priv->scale_opaque_region(opaque, 0);
+    region ^= opaque;
+}
+
 bool wf::view_interface_t::render_transformed(const wf::framebuffer_t& framebuffer,
     const wf::region_t& damage)
 {
     if (!is_mapped() && !view_impl->offscreen_buffer.valid())
         return false;
 
-    take_snapshot();
-    auto& offscreen_buffer = view_impl->offscreen_buffer;
-    auto& transforms = view_impl->transforms;
-
-    /* Render the view passing its snapshot through the transformers.
-     * For each transformer except the last we render on offscreen buffers,
-     * and the last one is rendered to the real fb. */
     wf::geometry_t obox = get_untransformed_bounding_box();
-    obox.width = offscreen_buffer.geometry.width;
-    obox.height = offscreen_buffer.geometry.height;
+    wf::texture_t previous_texture;
+    float texture_scale;
+
+    if (is_mapped() && enumerate_surfaces().size() == 1 && get_wlr_surface())
+    {
+        /* Optimized case: there is a single mapped surface.
+         * We can directly start with its texture */
+        previous_texture =
+            wf::get_texture_from_surface(this->get_wlr_surface());
+        texture_scale = this->get_wlr_surface()->current.scale;
+    } else
+    {
+        take_snapshot();
+        previous_texture = wf::texture_t{view_impl->offscreen_buffer.tex};
+        texture_scale = view_impl->offscreen_buffer.scale;
+    }
 
     /* We keep a shared_ptr to the previous transform which we executed, so that
      * even if it gets removed, its texture remains valid.
@@ -817,11 +863,14 @@ bool wf::view_interface_t::render_transformed(const wf::framebuffer_t& framebuff
      * cycle is complete, because the memory might have already been freed.
      * We only know that the texture is still alive. */
     std::shared_ptr<view_transform_block_t> previous_transform = nullptr;
-    GLuint previous_texture = offscreen_buffer.tex;
 
     /* final_transform is the one that should render to the screen */
     std::shared_ptr<view_transform_block_t> final_transform = nullptr;
 
+    /* Render the view passing its snapshot through the transformers.
+     * For each transformer except the last we render on offscreen buffers,
+     * and the last one is rendered to the real fb. */
+    auto& transforms = view_impl->transforms;
     transforms.for_each([&] (auto& transform) -> void
     {
         /* Last transform is handled separately */
@@ -834,18 +883,20 @@ bool wf::view_interface_t::render_transformed(const wf::framebuffer_t& framebuff
         /* Calculate size after this transform */
         auto transformed_box =
             transform->transform->get_bounding_box(obox, obox);
+        int scaled_width = transformed_box.width * texture_scale;
+        int scaled_height = transformed_box.height * texture_scale;
 
         /* Prepare buffer to store result after the transform */
         OpenGL::render_begin();
-        transform->fb.allocate(transformed_box.width, transformed_box.height);
+        transform->fb.allocate(scaled_width, scaled_height);
+        transform->fb.scale = texture_scale;
         transform->fb.geometry = transformed_box;
         transform->fb.bind(); // bind buffer to clear it
         OpenGL::clear({0, 0, 0, 0});
         OpenGL::render_end();
 
         /* Actually render the transform to the next framebuffer */
-        wf::region_t whole_region{wlr_box{0, 0,
-            transformed_box.width, transformed_box.height}};
+        wf::region_t whole_region{wlr_box{0, 0, scaled_width, scaled_height}};
         transform->transform->render_with_damage(previous_texture, obox,
             whole_region, transform->fb);
 
@@ -910,24 +961,42 @@ void wf::view_interface_t::take_snapshot()
 
     float scale = get_output()->handle->scale;
 
+    offscreen_buffer.cached_damage &= buffer_geometry;
     /* Nothing has changed, the last buffer is still valid */
     if (offscreen_buffer.cached_damage.empty())
         return;
 
-    /* TODO: use offscreen buffer better */
-    offscreen_buffer.cached_damage.clear();
+    int scaled_width = buffer_geometry.width * scale;
+    int scaled_height = buffer_geometry.height * scale;
+    if (scaled_width != offscreen_buffer.viewport_width ||
+        scaled_height != offscreen_buffer.viewport_height)
+    {
+        offscreen_buffer.cached_damage |= buffer_geometry;
+    }
+
+    offscreen_buffer.cached_damage +=
+        -wf::point_t{buffer_geometry.x, buffer_geometry.y};
 
     OpenGL::render_begin();
-    offscreen_buffer.allocate(buffer_geometry.width * scale,
-        buffer_geometry.height * scale);
-
+    offscreen_buffer.allocate(scaled_width, scaled_height);
     offscreen_buffer.scale = scale;
     offscreen_buffer.bind();
-    OpenGL::clear({0, 0, 0, 0});
+    for (auto& box : offscreen_buffer.cached_damage)
+    {
+        offscreen_buffer.scissor(
+            offscreen_buffer.framebuffer_box_from_geometry_box(
+                wlr_box_from_pixman_box(box)));
+        OpenGL::clear({0, 0, 0, 0});
+    }
+
     OpenGL::render_end();
 
-    wf::region_t full_region{{0, 0, offscreen_buffer.viewport_width,
-        offscreen_buffer.viewport_height}};
+    wf::region_t damage_region;
+    for (auto& rect : offscreen_buffer.cached_damage)
+    {
+        auto box = wlr_box_from_pixman_box(rect);
+        damage_region |= offscreen_buffer.damage_box_from_geometry_box(box);
+    }
 
     auto output_geometry = get_output_geometry();
     int ox = output_geometry.x - buffer_geometry.x;
@@ -937,8 +1006,10 @@ void wf::view_interface_t::take_snapshot()
     for (auto& child : wf::reverse(children))
     {
         child.surface->simple_render(offscreen_buffer,
-            child.position.x, child.position.y, full_region);
+            child.position.x, child.position.y, damage_region);
     }
+
+    offscreen_buffer.cached_damage.clear();
 }
 
 wf::view_interface_t::view_interface_t() : surface_interface_t(nullptr)

@@ -5,17 +5,7 @@
 #include <wayfire/output.hpp>
 #include <wayfire/opengl.hpp>
 #include <wayfire/render-manager.hpp>
-
 #include "animate.hpp"
-
-extern "C"
-{
-#define static
-#include <wlr/types/wlr_matrix.h>
-#include <wlr/render/wlr_renderer.h>
-#undef static
-#include <wlr/types/wlr_output.h>
-}
 
 /* animates wake from suspend/startup by fading in the whole output */
 class wf_system_fade
@@ -44,22 +34,15 @@ class wf_system_fade
 
         void render()
         {
-            float color[4] = {0, 0, 0, (float) this->progression};
-
+            wf::color_t color{0, 0, 0, this->progression};
+            auto fb = output->render->get_target_framebuffer();
             auto geometry = output->get_relative_geometry();
-            geometry = output->render->get_target_framebuffer()
-                .damage_box_from_geometry_box(geometry);
 
-            OpenGL::render_begin(output->render->get_target_framebuffer());
-
-            float matrix[9];
-            wlr_matrix_project_box(matrix, &geometry,
-                                   WL_OUTPUT_TRANSFORM_NORMAL,
-                                   0, output->handle->transform_matrix);
-
-            wlr_render_quad_with_matrix(wf::get_core().renderer, color, matrix);
-
+            OpenGL::render_begin(fb);
+            OpenGL::render_rectangle(geometry, color,
+                fb.get_orthographic_projection());
             OpenGL::render_end();
+
             if (!progression.running())
                 finish();
         }

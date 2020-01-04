@@ -7,6 +7,8 @@
 #include <wayfire/core.hpp>
 #include <wayfire/img.hpp>
 
+#include "cubemap-shaders.tpp"
+
 wf_cube_background_cubemap::wf_cube_background_cubemap()
 {
     create_program();
@@ -16,21 +18,15 @@ wf_cube_background_cubemap::wf_cube_background_cubemap()
 wf_cube_background_cubemap::~wf_cube_background_cubemap()
 {
     OpenGL::render_begin();
-    GL_CALL(glDeleteProgram(program));
+    program.free_resources();
     OpenGL::render_end();
 }
 
 void wf_cube_background_cubemap::create_program()
 {
     OpenGL::render_begin();
-
-    std::string shader_path = INSTALL_PREFIX "/share/wayfire/cube/shaders_2.0";
-    program = OpenGL::create_program(shader_path + "/vertex_cubemap.glsl",
-        shader_path + "/frag_cubemap.glsl");
-
-    posID =  GL_CALL(glGetAttribLocation(program, "position"));
-    matrixID = GL_CALL(glGetUniformLocation(program, "cubeMapMatrix"));
-
+    program.set_simple(
+        OpenGL::compile_program(cubemap_vertex, cubemap_fragment));
     OpenGL::render_end();
 }
 
@@ -88,14 +84,11 @@ void wf_cube_background_cubemap::render_frame(const wf::framebuffer_t& fb,
         GL_CALL(glClear(GL_COLOR_BUFFER_BIT));
         return;
     }
-
-    GL_CALL(glUseProgram(program));
+    program.use(wf::TEXTURE_TYPE_RGBA);
     GL_CALL(glDepthMask(GL_FALSE));
 
     GL_CALL(glBindTexture(GL_TEXTURE_CUBE_MAP, tex));
-
-    GL_CALL(glEnableVertexAttribArray(posID));
-    GL_CALL(glVertexAttribPointer(posID, 3, GL_FLOAT, GL_FALSE, 0, skyboxVertices));
+    program.attrib_pointer("position", 3, 0, skyboxVertices);
 
     auto model = glm::rotate(glm::mat4(1.0),
         float(attribs.cube_animation.rotation * 0.7f),
@@ -109,11 +102,11 @@ void wf_cube_background_cubemap::render_frame(const wf::framebuffer_t& fb,
     auto vp = fb.transform * attribs.projection * view;
 
     model = vp * model;
+    program.uniformMatrix4f("cubeMapMatrix", model);
 
-    GL_CALL(glUniformMatrix4fv(matrixID, 1, GL_FALSE, &model[0][0]));
     GL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6 * 6));
-    GL_CALL(glDisableVertexAttribArray(posID));
-    GL_CALL(glDepthMask(GL_TRUE));
 
+    program.deactivate();
+    GL_CALL(glDepthMask(GL_TRUE));
     OpenGL::render_end();
 }

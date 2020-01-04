@@ -1,5 +1,5 @@
 #include <wayfire/util/log.hpp>
-#include <fstream>
+#include <map>
 #include "opengl-priv.hpp"
 #include "wayfire/output.hpp"
 #include "core-impl.hpp"
@@ -15,6 +15,8 @@ extern "C"
 }
 
 #include <glm/gtc/matrix_transform.hpp>
+
+#include "shaders.tpp"
 
 const char* gl_error_string(const GLenum err) {
     switch (err) {
@@ -43,15 +45,8 @@ namespace OpenGL
 {
     /* Different Context is kept for each output */
     /* Each of the following functions uses the currently bound context */
-    struct
-    {
-        GLuint id;
-
-        GLuint mvpID, colorID;
-        GLuint position, uvPosition;
-    } program;
-
-    GLuint compile_shader_from_file(std::string path, std::string source, GLuint type)
+    program_t program, color_program;
+    GLuint compile_shader(std::string source, GLuint type)
     {
         GLuint shader = GL_CALL(glCreateShader(type));
 
@@ -67,37 +62,19 @@ namespace OpenGL
 
         if (s == GL_FALSE)
         {
-            LOGE("Failed to load shader from ", path, "\n; Errors:\n", b1);
+            LOGE("Failed to load shader:\n", source,
+                "\nCompiler output:\n", b1);
             return -1;
         }
 
         return shader;
     }
 
-    GLuint compile_shader(std::string source, GLuint type)
+    /* Create a very simple gl program from the given shader sources */
+    GLuint compile_program(std::string vertex_source, std::string frag_source)
     {
-        return compile_shader_from_file("internal", source, type);
-    }
-
-    GLuint load_shader(std::string path, GLuint type)
-    {
-        std::fstream file(path, std::ios::in);
-        if(!file.is_open())
-        {
-            LOGE("cannot open shader file ", path);
-            return -1;
-        }
-
-        std::string str, line;
-        while(std::getline(file, line))
-            str += line, str += '\n';
-
-        return compile_shader(str.c_str(), type);
-    }
-
-    GLuint create_program_from_shaders(GLuint vertex_shader,
-        GLuint fragment_shader)
-    {
+        auto vertex_shader = compile_shader(vertex_source, GL_VERTEX_SHADER);
+        auto fragment_shader = compile_shader(frag_source, GL_FRAGMENT_SHADER);
         auto result_program = GL_CALL(glCreateProgram());
         GL_CALL(glAttachShader(result_program, vertex_shader));
         GL_CALL(glAttachShader(result_program, fragment_shader));
@@ -110,34 +87,15 @@ namespace OpenGL
         return result_program;
     }
 
-    GLuint create_program_from_source(std::string vertex_source,
-        std::string frag_source)
-    {
-        return create_program_from_shaders(
-            compile_shader(vertex_source, GL_VERTEX_SHADER),
-            compile_shader(frag_source, GL_FRAGMENT_SHADER));
-    }
-
-    GLuint create_program(std::string vertex_path, std::string frag_path)
-    {
-        return create_program_from_shaders(
-            load_shader(vertex_path, GL_VERTEX_SHADER),
-            load_shader(frag_path, GL_FRAGMENT_SHADER));
-    }
-
     void init()
     {
         render_begin();
-
         // enable_gl_synchronuous_debug()
-        std::string shader_path = INSTALL_PREFIX "/share/wayfire/shaders";
-        program.id = create_program(
-            shader_path + "/vertex.glsl", shader_path + "/frag.glsl");
+        program.compile(default_vertex_shader_source,
+            default_fragment_shader_source);
 
-        program.mvpID      = GL_CALL(glGetUniformLocation(program.id, "MVP"));
-        program.colorID    = GL_CALL(glGetUniformLocation(program.id, "color"));
-        program.position   = GL_CALL(glGetAttribLocation(program.id, "position"));
-        program.uvPosition = GL_CALL(glGetAttribLocation(program.id, "uvPosition"));
+        color_program.set_simple(compile_program(default_vertex_shader_source,
+                color_rect_fragment_source));
 
         render_end();
     }
@@ -145,7 +103,8 @@ namespace OpenGL
     void fini()
     {
         render_begin();
-        GL_CALL(glDeleteProgram(program.id));
+        program.free_resources();
+        color_program.free_resources();
         render_end();
     }
 
@@ -164,11 +123,11 @@ namespace OpenGL
         current_output = NULL;
     }
 
-    void render_transformed_texture(GLuint tex,
+    void render_transformed_texture(wf::texture_t tex,
         const gl_geometry& g, const gl_geometry& texg,
         glm::mat4 model, glm::vec4 color, uint32_t bits)
     {
-        GL_CALL(glUseProgram(program.id));
+        program.use(tex.type);
 
         gl_geometry final_g = g;
         if (bits & TEXTURE_TRANSFORM_INVERT_Y)
@@ -197,24 +156,42 @@ namespace OpenGL
             coordData[6] = texg.x1; coordData[7] = texg.y1;
         }
 
-        GL_CALL(glBindTexture(GL_TEXTURE_2D, tex));
-        GL_CALL(glActiveTexture(GL_TEXTURE0));
-
-        GL_CALL(glVertexAttribPointer(program.position, 2, GL_FLOAT, GL_FALSE, 0, vertexData));
-        GL_CALL(glEnableVertexAttribArray(program.position));
-
-        GL_CALL(glVertexAttribPointer(program.uvPosition, 2, GL_FLOAT, GL_FALSE, 0, coordData));
-        GL_CALL(glEnableVertexAttribArray(program.uvPosition));
-
-        GL_CALL(glUniformMatrix4fv(program.mvpID, 1, GL_FALSE, &model[0][0]));
-        GL_CALL(glUniform4fv(program.colorID, 1, &color[0]));
+        program.set_active_texture(tex);
+        program.attrib_pointer("position", 2, 0, vertexData);
+        program.attrib_pointer("uvPosition", 2, 0, coordData);
+        program.uniformMatrix4f("MVP", model);
+        program.uniform4f("color", color);
 
         GL_CALL(glEnable(GL_BLEND));
         GL_CALL(glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
         GL_CALL(glDrawArrays(GL_TRIANGLE_FAN, 0, 4));
 
-        GL_CALL(glDisableVertexAttribArray(program.uvPosition));
-        GL_CALL(glDisableVertexAttribArray(program.position));
+        program.deactivate();
+    }
+
+    void render_rectangle(wf::geometry_t geometry, wf::color_t color,
+        glm::mat4 matrix)
+    {
+        color_program.use(wf::TEXTURE_TYPE_RGBA);
+        float x = geometry.x, y = geometry.y,
+              w = geometry.width, h = geometry.height;
+
+        GLfloat vertexData[] = {
+            x, y + h,
+            x + w, y + h,
+            x + w, y,
+            x, y,
+        };
+
+        color_program.attrib_pointer("position", 2, 0, vertexData);
+        color_program.uniformMatrix4f("MVP", matrix);
+        color_program.uniform4f("color", {color.r, color.g, color.b, color.a});
+
+        GL_CALL(glEnable(GL_BLEND));
+        GL_CALL(glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
+        GL_CALL(glDrawArrays(GL_TRIANGLE_FAN, 0, 4));
+
+        color_program.deactivate();
     }
 
     void render_begin()
@@ -452,4 +429,213 @@ glm::mat4 get_output_matrix_from_transform(wl_output_transform transform)
         rotation_matrix = glm::rotate(rotation_matrix,  WF_PI / 2.0f, {0, 0, 1});
 
     return rotation_matrix * scale;
+}
+
+namespace wf
+{
+wf::texture_t::texture_t() { }
+wf::texture_t::texture_t(GLuint tex)
+{ this->tex_id = tex; }
+};
+
+namespace OpenGL
+{
+class program_t::impl
+{
+  public:
+    std::set<int> active_attrs;
+    std::set<int> active_attrs_divisors;
+
+    int active_program_idx = 0;
+
+    int id[wf::TEXTURE_TYPE_ALL];
+    std::map<std::string, int> uniforms[wf::TEXTURE_TYPE_ALL];
+
+    /** Find the uniform location for the currently bound program */
+    int find_uniform_loc(const std::string& name)
+    {
+        auto it = uniforms[active_program_idx].find(name);
+        if (it != uniforms[active_program_idx].end())
+            return it->second;
+
+        uniforms[active_program_idx][name] =
+            GL_CALL(glGetUniformLocation(id[active_program_idx], name.c_str()));
+        return uniforms[active_program_idx][name];
+    }
+
+    std::map<std::string, int> attribs[wf::TEXTURE_TYPE_ALL];
+    /** Find the attrib location for the currently bound program */
+    int find_attrib_loc(const std::string& name)
+    {
+        auto it = attribs[active_program_idx].find(name);
+        if (it != attribs[active_program_idx].end())
+            return it->second;
+
+        attribs[active_program_idx][name] =
+            GL_CALL(glGetAttribLocation(id[active_program_idx], name.c_str()));
+        return attribs[active_program_idx][name];
+    }
+};
+
+program_t::program_t()
+{
+    this->priv = std::make_unique<impl> ();
+    for (int i = 0; i < wf::TEXTURE_TYPE_ALL; i++)
+        this->priv->id[i] = 0;
+}
+
+void program_t::set_simple(GLuint program_id, wf::texture_type_t type)
+{
+    free_resources();
+    assert(type < wf::TEXTURE_TYPE_ALL);
+    this->priv->id[type] = program_id;
+}
+
+program_t::~program_t() {}
+
+static std::string replace_builtin_with(const std::string& source,
+    const std::string& builtin, const std::string& with)
+{
+    size_t pos = source.find(builtin);
+    if (pos == std::string::npos)
+        return source;
+
+    return source.substr(0, pos) + with + source.substr(pos + builtin.length());
+}
+
+static const std::string builtin = "@builtin@";
+static const std::string builtin_ext = "@builtin_ext@";
+struct texture_type_builtins
+{
+    std::string builtin;
+    std::string builtin_ext;
+};
+
+std::map<wf::texture_type_t, texture_type_builtins> builtins = {
+    {wf::TEXTURE_TYPE_RGBA, {builtin_rgba_source, ""}},
+    {wf::TEXTURE_TYPE_RGBX, {builtin_rgbx_source, ""}},
+    {wf::TEXTURE_TYPE_EXTERNAL, {builtin_external_source,
+                                    builtin_ext_external_source}},
+};
+
+void program_t::compile(const std::string& vertex_source,
+    const std::string& fragment_source)
+{
+    free_resources();
+
+    for (const auto& program_type : builtins)
+    {
+        auto fragment = replace_builtin_with(fragment_source,
+            builtin, program_type.second.builtin);
+        fragment =  replace_builtin_with(fragment,
+            builtin_ext, program_type.second.builtin_ext);
+        this->priv->id[program_type.first] =
+            compile_program(vertex_source, fragment);
+    }
+}
+
+void program_t::free_resources()
+{
+    for (int i = 0; i < wf::TEXTURE_TYPE_ALL; i++)
+    {
+        if (this->priv->id[i])
+        {
+            GL_CALL(glDeleteProgram(priv->id[i]));
+            this->priv->id[i] = 0;
+        }
+    }
+}
+
+void program_t::use(wf::texture_type_t type)
+{
+    if (priv->id[type] == 0)
+    {
+        throw std::runtime_error("program_t has no program for type "
+            + std::to_string(type));
+    }
+
+    GL_CALL(glUseProgram(priv->id[type]));
+    priv->active_program_idx = type;
+}
+
+int program_t::get_program_id(wf::texture_type_t type)
+{
+    return priv->id[type];
+}
+
+void program_t::uniform1i(const std::string& name, int value)
+{
+    int loc = priv->find_uniform_loc(name);
+    GL_CALL(glUniform1i(loc, value));
+}
+
+void program_t::uniform1f(const std::string& name, float value)
+{
+    int loc = priv->find_uniform_loc(name);
+    GL_CALL(glUniform1f(loc, value));
+
+}
+
+void program_t::uniform2f(const std::string& name, float x, float y)
+{
+    int loc = priv->find_uniform_loc(name);
+    GL_CALL(glUniform2f(loc, x, y));
+}
+
+void program_t::uniform4f(const std::string& name, const glm::vec4& value)
+{
+    int loc = priv->find_uniform_loc(name);
+    GL_CALL(glUniform4f(loc, value.r, value.g, value.b, value.a));
+}
+
+void program_t::uniformMatrix4f(const std::string& name, const glm::mat4& value)
+{
+    int loc = priv->find_uniform_loc(name);
+    GL_CALL(glUniformMatrix4fv(loc, 1, GL_FALSE, &value[0][0]));
+}
+
+void program_t::attrib_pointer(const std::string& attrib,
+    int size, int stride, const void *ptr, GLenum type)
+{
+    int loc = priv->find_attrib_loc(attrib);
+    priv->active_attrs.insert(loc);
+
+    GL_CALL(glEnableVertexAttribArray(loc));
+    GL_CALL(glVertexAttribPointer(loc, size, type, GL_FALSE, stride, ptr));
+}
+
+void program_t::attrib_divisor(const std::string& attrib, int divisor)
+{
+    int loc = priv->find_attrib_loc(attrib);
+    priv->active_attrs_divisors.insert(loc);
+    GL_CALL(glVertexAttribDivisor(loc, divisor));
+}
+
+void program_t::set_active_texture(const wf::texture_t& texture)
+{
+    GL_CALL(glActiveTexture(GL_TEXTURE0));
+    GL_CALL(glBindTexture(texture.target, texture.tex_id));
+    GL_CALL(glTexParameteri(texture.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+
+    uniform1f("_wayfire_y_base", texture.invert_y ? 1 : 0);
+    uniform1f("_wayfire_y_mult", texture.invert_y ? -1 : 1);
+}
+
+void program_t::deactivate()
+{
+    for (int loc : priv->active_attrs_divisors)
+    {
+        GL_CALL(glVertexAttribDivisor(loc, 0));
+    }
+
+    for (int loc : priv->active_attrs)
+    {
+        GL_CALL(glDisableVertexAttribArray(loc));
+    }
+
+    priv->active_attrs_divisors.clear();
+    priv->active_attrs.clear();
+    GL_CALL(glUseProgram(0));
+}
+
 }
