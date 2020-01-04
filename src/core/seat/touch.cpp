@@ -196,8 +196,8 @@ void wf_gesture_recognizer::register_touch(int time, int id, wf::pointf_t point)
     if (in_gesture)
         reset_gesture();
 
-    if (current.size() >= MIN_FINGERS && !in_gesture)
-        start_new_gesture();
+    // if (current.size() >= MIN_FINGERS && !in_gesture)
+    //     start_new_gesture();
 
     if (!in_gesture)
     {
