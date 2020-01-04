@@ -9,7 +9,7 @@ extern "C"
 
 namespace wf
 {
-class touchgesture_t;
+struct touchgesture_t;
 struct binding_t;
 
 using key_callback = std::function<bool(uint32_t)>;
