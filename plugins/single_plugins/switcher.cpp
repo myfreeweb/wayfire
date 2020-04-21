@@ -783,6 +783,8 @@ class WayfireSwitcher : public wf::plugin_interface_t
 
     void fini() override
     {
+        if (output->is_plugin_active(grab_interface->name))
+            deinit_switcher();
         output->rem_binding(&next_view_binding);
         output->rem_binding(&prev_view_binding);
         output->rem_binding(&touch_activate);
