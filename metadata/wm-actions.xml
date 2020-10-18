@@ -10,8 +10,8 @@
 			<default>disabled</default>
 		</option>
 		<option name="toggle_fullscreen" type="activator">
-			<_short>Toggle Fulsreen</_short>
-			<_long>Toggle the fullsreen state of a view.</_long>
+			<_short>Toggle Fullscreen</_short>
+			<_long>Toggle the fullscreen state of a view.</_long>
 			<default>disabled</default>
 		</option>
 		<option name="toggle_sticky" type="activator">
