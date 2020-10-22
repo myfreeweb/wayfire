@@ -57,7 +57,8 @@ They are relevant for cases when the system doesn't have a version of wlroots in
 #### Session Provider (optional, recommended)
 
 - [systemd](https://systemd.io/) **or**
-- [elogind](https://github.com/elogind/elogind)
+- [elogind](https://github.com/elogind/elogind) **or**
+- [seatd](https://git.sr.ht/~kennylevinsen/seatd)
 
 #### XWayland Support (optional)
 
