@@ -37,7 +37,7 @@ class bindings_repository_t
      *
      * @return true if any of the matching registered bindings consume the event.
      */
-    bool handle_key(const wf::keybinding_t& pressed);
+    bool handle_key(const wf::keybinding_t& pressed, uint32_t mod_binding_key);
 
     /** Handle an axis event. */
     bool handle_axis(uint32_t modifiers, wlr_event_pointer_axis *ev);

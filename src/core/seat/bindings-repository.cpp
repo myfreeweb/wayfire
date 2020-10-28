@@ -1,9 +1,14 @@
 #include "bindings-repository.hpp"
+#include "wayfire/util/log.hpp"
 #include <algorithm>
 
-bool wf::bindings_repository_t::handle_key(const wf::keybinding_t& pressed)
+bool wf::bindings_repository_t::handle_key(const wf::keybinding_t& pressed,
+    uint32_t mod_binding_key)
 {
     std::vector<std::function<bool()>> callbacks;
+    uint32_t actual_key = pressed.get_key() ==
+        0 ? mod_binding_key : pressed.get_key();
+
     for (auto& binding : this->keys)
     {
         if (binding->activated_by->get_value() == pressed)
@@ -11,9 +16,9 @@ bool wf::bindings_repository_t::handle_key(const wf::keybinding_t& pressed)
             /* We must be careful because the callback might be erased,
              * so force copy the callback into the lambda */
             auto callback = binding->callback;
-            callbacks.emplace_back([pressed, callback] ()
+            callbacks.emplace_back([actual_key, callback] ()
             {
-                return (*callback)(pressed.get_key());
+                return (*callback)(actual_key);
             });
         }
     }
