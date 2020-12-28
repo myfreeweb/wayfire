@@ -7,9 +7,14 @@
 		<group>
 			<_short>Commands</_short>
 			<_long>Sets the command bindings.</_long>
+			<option name="binding" type="dynamic_list">
+				<_short>Binding</_short>
+				<_long>Sets the binding.</_long>
+				<type>activator</type>
+			</option>
 			<option name="command" type="dynamic_list">
 				<_short>Command</_short>
-				<_long>Sets the command binding.</_long>
+				<_long>Sets the command.</_long>
 				<type>string</type>
 				<hint>file</hint>
 			</option>
